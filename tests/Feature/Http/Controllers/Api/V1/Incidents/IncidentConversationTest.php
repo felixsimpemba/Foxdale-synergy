@@ -10,6 +10,7 @@ use App\Models\Incident;
 use App\Models\IncidentUpdate;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Testing\TestResponse;
@@ -147,6 +148,8 @@ describe('attachments', function () {
     });
 
     it('serves an image preview inline from a link that stays the same between loads', function () {
+        // Links expire in rounded 30-minute windows, so pin the clock away from a boundary.
+        $this->travelTo(Carbon::parse('2026-10-29 10:05:00', 'UTC'));
         actingAsRole(RoleName::Noc);
         $incident = Incident::factory()->create();
         postUpdate($incident, ['body' => 'Screenshot', 'attachments' => [screenshot()]])->assertCreated();

@@ -77,7 +77,11 @@ jobs:
         run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
       - name: Tests (Pest)
-        run: php artisan test --compact
+        run: php artisan test --compact --log-junit junit.xml
+
+      - name: Report failing tests
+        if: failure()
+        run: php .github/scripts/annotate-failures.php junit.xml
 
   deploy:
     name: Deploy to production
