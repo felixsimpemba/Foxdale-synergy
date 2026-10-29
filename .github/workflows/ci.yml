@@ -111,16 +111,39 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -euo pipefail
+
+          missing=""
+          [ -n "${SSH_HOST:-}" ] || missing="$missing SSH_HOST"
+          [ -n "${SSH_USER:-}" ] || missing="$missing SSH_USER"
+          [ -n "${SSH_PRIVATE_KEY:-}" ] || missing="$missing SSH_PRIVATE_KEY"
+          [ -n "${DEPLOY_PATH:-}" ] || missing="$missing DEPLOY_PATH"
+
+          if [ -n "$missing" ]; then
+            echo "::error title=Deployment secrets missing::Add these repository secrets under Settings > Secrets and variables > Actions > Secrets:$missing"
+            exit 1
+          fi
+
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
 
+          if ! ssh-keygen -y -f ~/.ssh/id_deploy > /dev/null 2>&1; then
+            echo "::error title=SSH_PRIVATE_KEY is not a valid private key::Paste the whole key file, including the BEGIN and END lines."
+            exit 1
+          fi
+
           if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
             printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            echo "::notice::Using the pinned SSH_KNOWN_HOSTS secret."
+          elif ! ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts 2> /tmp/keyscan.log; then
+            echo "::error title=Cannot read the server host key::ssh-keyscan could not reach ${SSH_HOST}:${SSH_PORT} from the runner. Check SSH_HOST (just the address, no ssh://) and that the VPS firewall allows SSH from GitHub. Or pin the key with an SSH_KNOWN_HOSTS secret."
+            head -5 /tmp/keyscan.log || true
+            exit 1
           else
-            ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            echo "::notice::Fetched the host key for ${SSH_HOST}:${SSH_PORT}."
           fi
 
       - name: Deploy over SSH
