@@ -84,6 +84,18 @@ describe('writing', function () {
             ->assertJsonPath('data.due_at', '2026-11-02T23:59:59Z');
     });
 
+    it('ends the due day in the display timezone, not UTC', function () {
+        app(SettingsService::class)->update(['display_timezone' => 'Africa/Lusaka', 'rca.due_business_days' => 1]);
+        $this->travelTo(Carbon::parse('2026-10-30 10:00:00', 'UTC')); // a Friday
+        $author = actingAsRole(RoleName::Responder);
+        $incident = resolvedSev1(['resolved_at' => now(), 'reporter_id' => $author->id]);
+
+        $this->postJson("/api/v1/incidents/{$incident->id}/rca", [])
+            ->assertCreated()
+            // Monday 23:59:59 in Lusaka (UTC+2) is 21:59:59 UTC.
+            ->assertJsonPath('data.due_at', '2026-11-02T21:59:59Z');
+    });
+
     it('sets the due date when the incident is resolved after the RCA was started', function () {
         $manager = actingAsRole(RoleName::IncidentManager);
         $incident = Incident::factory()->severity(Severity::Sev2)->inStatus(IncidentStatus::Investigating)->assignedTo($manager)->create();

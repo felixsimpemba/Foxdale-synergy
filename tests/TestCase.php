@@ -13,4 +13,18 @@ abstract class TestCase extends BaseTestCase
     protected bool $seed = true;
 
     protected string $seeder = RolesAndPermissionsSeeder::class;
+
+    /**
+     * Tests must not depend on the developer's or the CI server's .env. A few tests change
+     * these themselves when they specifically cover timezone behaviour.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config([
+            'incidents.display_timezone' => 'UTC',
+            'incidents.settings.display_timezone' => 'UTC',
+        ]);
+    }
 }
