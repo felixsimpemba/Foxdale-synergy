@@ -1,12 +1,34 @@
-name: CI
+name: CI/CD
 
+# Tests, style and static analysis on every push and pull request. When main is green,
+# deploy to the server over SSH (only if DEPLOY_ENABLED=true; see the notes at the bottom).
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per branch. Pull requests cancel older runs; main never cancels a deploy.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DB_CONNECTION: mysql
+  DB_HOST: 127.0.0.1
+  DB_PORT: 3306
+  DB_DATABASE: foxdale_incidents_test
+  DB_USERNAME: foxdale
+  DB_PASSWORD: secret
 
 jobs:
-  tests:
+  test:
+    name: Tests, style and static analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     services:
       mysql:
@@ -21,15 +43,8 @@ jobs:
         options: >-
           --health-cmd="mysqladmin ping -h localhost -psecret"
           --health-interval=5s
+          --health-timeout=5s
           --health-retries=20
-
-    env:
-      DB_CONNECTION: mysql
-      DB_HOST: 127.0.0.1
-      DB_PORT: 3306
-      DB_DATABASE: foxdale_incidents_test
-      DB_USERNAME: foxdale
-      DB_PASSWORD: secret
 
     steps:
       - uses: actions/checkout@v4
@@ -37,16 +52,23 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: mbstring, pdo_mysql, bcmath, intl, zip
+          extensions: mbstring, pdo_mysql, bcmath, intl, zip, gd, curl
           coverage: none
 
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
       - name: Install dependencies
-        run: composer install --no-interaction --prefer-dist --no-progress
+        run: composer install --no-interaction --prefer-dist --no-progress --optimize-autoloader
 
       - name: Prepare environment
         run: |
           cp .env.example .env
-          php artisan key:generate
+          php artisan key:generate --ansi
 
       - name: Code style (Pint)
         run: vendor/bin/pint --test
@@ -56,3 +78,108 @@ jobs:
 
       - name: Tests (Pest)
         run: php artisan test --compact
+
+  deploy:
+    name: Deploy to production
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Only from main, only after a real push (or a manual run), and only once the
+    # DEPLOY_ENABLED repository variable is "true".
+    if: >-
+      vars.DEPLOY_ENABLED == 'true'
+      && github.ref == 'refs/heads/main'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+
+    environment: production
+
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+
+      - name: Deploy over SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+
+          php -r 'exit(PHP_VERSION_ID >= 80300 ? 0 : 1);' || {
+            echo "PHP 8.3 or newer is required on the server." >&2
+            exit 1
+          }
+
+          git fetch --prune origin main
+          echo "Deploying $(git log -1 --format='%h %s' origin/main)"
+
+          # The server keeps its own .env, storage and vendor: they are git-ignored.
+          git reset --hard origin/main
+
+          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+          php artisan migrate --force
+          php artisan optimize
+          php artisan queue:restart
+
+          echo "Deployed."
+          REMOTE
+
+      - name: Health check
+        if: vars.HEALTHCHECK_URL != ''
+        env:
+          HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS --max-time 10 "$HEALTHCHECK_URL" > /dev/null; then
+              echo "Healthy."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Health check failed: $HEALTHCHECK_URL" >&2
+          exit 1
+
+# Repository settings this workflow expects
+# -----------------------------------------
+# Secrets (Settings > Secrets and variables > Actions):
+#   SSH_HOST          server address
+#   SSH_USER          deploy user (needs write access to DEPLOY_PATH, and php/composer on PATH)
+#   SSH_PRIVATE_KEY   private key for that user (no passphrase)
+#   SSH_PORT          optional, defaults to 22
+#   SSH_KNOWN_HOSTS   optional, pinned host key(s); otherwise ssh-keyscan is used
+#   DEPLOY_PATH       absolute path of the checkout on the server, e.g. /var/www/foxdale
+#
+# Variables:
+#   DEPLOY_ENABLED    "true" to turn deployments on
+#   HEALTHCHECK_URL   optional, e.g. https://api.example.com/up
+#
+# The server checkout must already exist (git clone + .env + storage permissions) and its
+# origin must be this repository. Keep a queue worker running; the deploy restarts it.
