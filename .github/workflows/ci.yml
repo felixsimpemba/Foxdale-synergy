@@ -47,7 +47,7 @@ jobs:
           --health-retries=20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -103,7 +103,7 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up SSH
         env:
@@ -131,8 +131,18 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
 
+          if ! head -c 11 ~/.ssh/id_deploy | grep -q -- '-----BEGIN '; then
+            echo "::error title=SSH_PRIVATE_KEY is not a private key file::The secret must be the private key (no .pub), starting with -----BEGIN OPENSSH PRIVATE KEY-----."
+            exit 1
+          fi
+
+          if grep -q '\\n' ~/.ssh/id_deploy; then
+            echo "::error title=SSH_PRIVATE_KEY contains literal backslash-n::The line breaks were escaped. Set it with \`gh secret set SSH_PRIVATE_KEY < ~/.ssh/your_key\` or paste the file with real line breaks."
+            exit 1
+          fi
+
           if ! ssh-keygen -y -f ~/.ssh/id_deploy > /dev/null 2>&1; then
-            echo "::error title=SSH_PRIVATE_KEY is not a valid private key::Paste the whole key file, including the BEGIN and END lines."
+            echo "::error title=SSH_PRIVATE_KEY could not be read::The key is incomplete or has a passphrase. Create one without a passphrase: ssh-keygen -t ed25519 -f ~/.ssh/foxdale_deploy -N \"\""
             exit 1
           fi
 
