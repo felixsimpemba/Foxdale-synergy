@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\V1\Notifications\NotificationLogController;
 use App\Http\Controllers\Api\V1\Notifications\NotificationPreferenceController;
 use App\Http\Controllers\Api\V1\Notifications\PushSubscriptionController;
 use App\Http\Controllers\Api\V1\PeopleController;
+use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Controllers\Api\V1\Rca\RcaActionItemController;
 use App\Http\Controllers\Api\V1\Rca\RcaController;
 use App\Http\Controllers\Api\V1\Routing\EscalationPolicyController;
@@ -38,6 +39,8 @@ use App\Http\Controllers\Api\V1\Routing\RoutingController;
 use App\Http\Controllers\Api\V1\Routing\RoutingRuleController;
 use App\Http\Controllers\Api\V1\ServiceController;
 use App\Http\Controllers\Api\V1\SlaPolicyController;
+use App\Http\Controllers\Api\V1\SprintController;
+use App\Http\Controllers\Api\V1\TaskController;
 use App\Http\Controllers\Api\V1\TeamController;
 use Illuminate\Support\Facades\Route;
 
@@ -122,6 +125,7 @@ Route::prefix('v1')->name('v1.')->group(function () {
                 Route::get('incidents', [IncidentController::class, 'index'])->name('incidents.index');
                 Route::get('incidents/{incident}', [IncidentController::class, 'show'])->name('incidents.show');
                 Route::get('incidents/{incident}/updates', [IncidentUpdateController::class, 'index'])->name('incidents.updates.index');
+                Route::get('incidents/{incident}/mentionable', [IncidentUpdateController::class, 'mentionable'])->name('incidents.mentionable');
                 Route::get('incidents/{incident}/timeline', [IncidentTimelineController::class, 'timeline'])->name('incidents.timeline');
                 Route::get('incidents/{incident}/history', [IncidentTimelineController::class, 'history'])->name('incidents.history');
                 Route::get('incidents/{incident}/time-entries', [TimeEntryController::class, 'index'])->name('incidents.time-entries.index');
@@ -193,6 +197,34 @@ Route::prefix('v1')->name('v1.')->group(function () {
             });
 
             Route::middleware('abilities:*')->group(function () {
+                // Projects (Work): planned work, sprints and tickets, kept separate from incidents.
+                Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');
+                Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
+                Route::get('projects/{project}', [ProjectController::class, 'show'])->name('projects.show');
+                Route::put('projects/{project}', [ProjectController::class, 'update'])->name('projects.update');
+                Route::delete('projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
+                Route::post('projects/{project}/members', [ProjectController::class, 'addMember'])->name('projects.members.store');
+                Route::delete('projects/{project}/members/{user}', [ProjectController::class, 'removeMember'])->name('projects.members.destroy');
+
+                Route::get('projects/{project}/sprints', [SprintController::class, 'index'])->name('projects.sprints.index');
+                Route::post('projects/{project}/sprints', [SprintController::class, 'store'])->name('projects.sprints.store');
+                Route::get('sprints/{sprint}', [SprintController::class, 'show'])->name('sprints.show');
+                Route::put('sprints/{sprint}', [SprintController::class, 'update'])->name('sprints.update');
+                Route::delete('sprints/{sprint}', [SprintController::class, 'destroy'])->name('sprints.destroy');
+
+                Route::get('projects/{project}/tasks', [TaskController::class, 'index'])->name('projects.tasks.index');
+                Route::get('projects/{project}/board', [TaskController::class, 'board'])->name('projects.board');
+                Route::post('projects/{project}/tasks', [TaskController::class, 'store'])->name('projects.tasks.store');
+                Route::get('tasks/{task}', [TaskController::class, 'show'])->name('tasks.show');
+                Route::put('tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');
+                Route::delete('tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy');
+                Route::post('tasks/{task}/move', [TaskController::class, 'move'])->name('tasks.move');
+                Route::post('tasks/{task}/assign', [TaskController::class, 'assign'])->name('tasks.assign');
+                Route::post('tasks/{task}/request-review', [TaskController::class, 'requestReview'])->name('tasks.request-review');
+                Route::post('tasks/{task}/approve', [TaskController::class, 'approve'])->name('tasks.approve');
+                Route::post('tasks/{task}/request-changes', [TaskController::class, 'requestChanges'])->name('tasks.request-changes');
+                Route::get('tasks/{task}/timeline', [TaskController::class, 'timeline'])->name('tasks.timeline');
+
                 Route::post('teams', [TeamController::class, 'store'])->name('teams.store');
                 Route::put('teams/{team}', [TeamController::class, 'update'])->name('teams.update');
                 Route::delete('teams/{team}', [TeamController::class, 'destroy'])->name('teams.destroy');

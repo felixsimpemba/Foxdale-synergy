@@ -13,7 +13,10 @@ it('lists roles with permissions and marks the default ones', function () {
         ->assertJsonCount(5, 'data')
         ->assertJsonPath('data.0.name', 'reporter')
         ->assertJsonPath('data.0.is_system', true)
-        ->assertJsonPath('data.0.permissions', ['document.upload', 'incident.create', 'incident.update', 'incident.view.own']);
+        ->assertJsonPath('data.0.permissions', [
+            'document.upload', 'incident.create', 'incident.update', 'incident.view.own',
+            'project.view', 'task.create', 'task.update',
+        ]);
 });
 
 it('lists every permission key with a description', function () {
@@ -21,7 +24,7 @@ it('lists every permission key with a description', function () {
 
     $this->getJson('/api/v1/admin/permissions')
         ->assertOk()
-        ->assertJsonCount(27, 'data')
+        ->assertJsonCount(34, 'data')
         ->assertJsonPath('data.0', ['key' => 'incident.create', 'description' => 'Report incidents']);
 });
 

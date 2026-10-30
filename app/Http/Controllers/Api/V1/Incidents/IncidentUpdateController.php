@@ -11,7 +11,10 @@ use App\Http\Requests\Incidents\UpdateIncidentUpdateRequest;
 use App\Http\Resources\IncidentUpdateResource;
 use App\Models\Incident;
 use App\Models\IncidentUpdate;
+use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\Mentions\Mentioner;
+use App\Services\Mentions\MentionNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -31,7 +34,7 @@ class IncidentUpdateController extends Controller
 
         return IncidentUpdateResource::collection(
             $incident->updates()
-                ->with('user', 'attachments')
+                ->with('user', 'attachments', 'mentions')
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')
                 ->paginate($this->perPage($request, 50)),
@@ -63,18 +66,24 @@ class IncidentUpdateController extends Controller
             $attachments,
         );
 
-        return (new IncidentUpdateResource($update->load('user', 'attachments')))->response()->setStatusCode(201);
+        return (new IncidentUpdateResource($update->load('user', 'attachments', 'mentions')))->response()->setStatusCode(201);
     }
 
     /**
      * Edit the text of your own comment; it is marked as edited and the change is audited.
      */
-    public function update(UpdateIncidentUpdateRequest $request, IncidentUpdate $incidentUpdate, AuditLogger $audit): IncidentUpdateResource
-    {
+    public function update(
+        UpdateIncidentUpdateRequest $request,
+        IncidentUpdate $incidentUpdate,
+        AuditLogger $audit,
+        Mentioner $mentioner,
+        MentionNotifier $mentionNotifier,
+    ): IncidentUpdateResource {
         Gate::authorize('update', $incidentUpdate);
 
         $before = $incidentUpdate->body;
-        $incidentUpdate->forceFill(['body' => $request->validated('body'), 'edited_at' => now()])->save();
+        $body = (string) $request->validated('body');
+        $incidentUpdate->forceFill(['body' => $body, 'edited_at' => now()])->save();
 
         $audit->record('incident_update.edited', $incidentUpdate->incident()->withTrashed()->firstOrFail(), [
             'update_id' => $incidentUpdate->id,
@@ -82,7 +91,32 @@ class IncidentUpdateController extends Controller
             'after' => ['body' => $incidentUpdate->body],
         ]);
 
-        return new IncidentUpdateResource($incidentUpdate->load('user', 'attachments'));
+        // Editing can add or remove mentions; only newly mentioned people are told.
+        $incident = Incident::query()->findOrFail($incidentUpdate->incident_id);
+        $author = $request->user();
+        $previous = $incidentUpdate->mentions()->pluck('users.id');
+        $mentioned = $mentioner->mentionedIn($body, $mentioner->mentionable($incident, $author));
+        $incidentUpdate->mentions()->sync($mentioned->modelKeys());
+        $added = $mentioned->reject(fn (User $person): bool => $previous->contains($person->id));
+
+        if ($added->isNotEmpty()) {
+            $mentionNotifier->notify($incident, $incidentUpdate, $author, $added, $body);
+        }
+
+        return new IncidentUpdateResource($incidentUpdate->load('user', 'attachments', 'mentions'));
+    }
+
+    /**
+     * People who can be @mentioned on this incident: everyone who can see it.
+     */
+    public function mentionable(Request $request, Incident $incident, Mentioner $mentioner): JsonResponse
+    {
+        Gate::authorize('view', $incident);
+
+        return response()->json(['data' => $mentioner->mentionable($incident, $request->user())
+            ->map(fn (User $person): array => ['id' => $person->id, 'name' => $person->name])
+            ->values()
+            ->all()]);
     }
 
     /**

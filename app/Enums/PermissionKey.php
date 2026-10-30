@@ -15,6 +15,13 @@ enum PermissionKey: string
     case IncidentAssign = 'incident.assign';
     case IncidentDelete = 'incident.delete';
     case IncidentClose = 'incident.close';
+    case ProjectView = 'project.view';
+    case ProjectManage = 'project.manage';
+    case TaskCreate = 'task.create';
+    case TaskUpdate = 'task.update';
+    case TaskAssign = 'task.assign';
+    case TaskReview = 'task.review';
+    case TaskDelete = 'task.delete';
     case TimeLog = 'time.log';
     case DocumentUpload = 'document.upload';
     case DocumentDelete = 'document.delete';
@@ -46,6 +53,13 @@ enum PermissionKey: string
             self::IncidentAssign => 'Reassign and escalate incidents',
             self::IncidentDelete => 'Soft delete incidents with a reason',
             self::IncidentClose => 'Close resolved incidents',
+            self::ProjectView => 'View projects the user belongs to',
+            self::ProjectManage => 'Create projects and manage any project, its members and sprints',
+            self::TaskCreate => 'Create tasks',
+            self::TaskUpdate => 'Edit and move tasks',
+            self::TaskAssign => 'Assign tasks to people',
+            self::TaskReview => 'Approve tasks or request changes',
+            self::TaskDelete => 'Delete tasks',
             self::TimeLog => 'Log work time',
             self::DocumentUpload => 'Upload documents',
             self::DocumentDelete => 'Delete any document (uploaders can always delete their own)',

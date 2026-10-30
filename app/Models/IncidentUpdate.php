@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -77,6 +78,16 @@ class IncidentUpdate extends Model
     public function replies(): HasMany
     {
         return $this->hasMany(self::class, 'parent_id')->orderBy('created_at')->orderBy('id');
+    }
+
+    /**
+     * People mentioned with @name in the text.
+     *
+     * @return BelongsToMany<User, $this>
+     */
+    public function mentions(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'incident_update_mentions')->withTimestamps();
     }
 
     /**

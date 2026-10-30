@@ -8,7 +8,9 @@ namespace App\Enums;
  */
 enum NotificationEvent: string
 {
+    case IncidentCreated = 'incident.created';
     case IncidentAssigned = 'incident.assigned';
+    case IncidentMention = 'incident.mention';
     case IncidentStatusChanged = 'incident.status_changed';
     case SlaWarning = 'sla.warning';
     case SlaBreached = 'sla.breached';
@@ -20,7 +22,9 @@ enum NotificationEvent: string
     public function label(): string
     {
         return match ($this) {
+            self::IncidentCreated => 'An incident is reported on my team',
             self::IncidentAssigned => 'An incident is assigned to me',
+            self::IncidentMention => 'Someone mentions me in a comment',
             self::IncidentStatusChanged => 'Status changes on incidents I reported or watch',
             self::SlaWarning => 'An incident I own is close to an SLA deadline',
             self::SlaBreached => 'An incident I own misses an SLA target',
@@ -34,7 +38,8 @@ enum NotificationEvent: string
     public function category(): string
     {
         return match ($this) {
-            self::IncidentAssigned, self::IncidentStatusChanged, self::SlaWarning, self::SlaBreached => 'Incidents',
+            self::IncidentCreated, self::IncidentAssigned, self::IncidentMention,
+            self::IncidentStatusChanged, self::SlaWarning, self::SlaBreached => 'Incidents',
             default => 'Root cause analysis',
         };
     }
@@ -45,6 +50,7 @@ enum NotificationEvent: string
     public function defaultChannels(): array
     {
         return match ($this) {
+            self::IncidentCreated, self::IncidentMention,
             self::IncidentAssigned => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
             self::IncidentStatusChanged => [NotificationChannel::InApp, NotificationChannel::Push],
             self::SlaWarning => [NotificationChannel::InApp, NotificationChannel::Push],

@@ -5,6 +5,7 @@ namespace App\Actions\Incidents;
 use App\Enums\IncidentSource;
 use App\Enums\IncidentStatus;
 use App\Enums\Severity;
+use App\Events\IncidentAssigned;
 use App\Events\IncidentCreated;
 use App\Models\Incident;
 use App\Models\User;
@@ -83,6 +84,13 @@ class CreateIncident
                     null,
                     'Chosen when reporting the incident',
                 );
+            }
+
+            // Routing picked someone: tell them, the same way an explicit assignment does.
+            // (Someone chosen while reporting is told by AssignIncident below.)
+            if ($incident->assignee_id !== null && blank($data['assignee_id'] ?? null)) {
+                $incident->load('assignee');
+                IncidentAssigned::dispatch($incident, null, $reporter);
             }
 
             IncidentCreated::dispatch($incident);

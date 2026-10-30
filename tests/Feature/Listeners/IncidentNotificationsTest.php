@@ -5,14 +5,19 @@ use App\Enums\RoleName;
 use App\Enums\Severity;
 use App\Enums\SlaMetric;
 use App\Events\IncidentAssigned;
+use App\Events\IncidentCreated;
 use App\Events\IncidentStatusChanged;
 use App\Events\SlaBreached;
 use App\Events\SlaWarningRaised;
 use App\Listeners\NotifyOnIncidentAssigned;
+use App\Listeners\NotifyOnIncidentCreated;
 use App\Listeners\NotifyOnSlaBreach;
 use App\Listeners\NotifyOnSlaWarning;
 use App\Listeners\NotifyOnStatusChanged;
+use App\Models\Category;
 use App\Models\Incident;
+use App\Models\RoutingRule;
+use App\Models\Service;
 use App\Models\Team;
 use App\Models\User;
 use App\Notifications\InAppAlert;
@@ -84,4 +89,44 @@ it('tells the assignee, the team lead and every incident manager when an SLA is 
     (new NotifyOnSlaBreach($this->notifications))->handle(new SlaBreached($incident, SlaMetric::Resolve));
 
     Notification::assertSentTo([$assignee, $lead, $manager], IncidentNotice::class);
+});
+
+it('tells the team lead about a new incident, and incident managers only for SEV1 and SEV2', function () {
+    Notification::fake();
+    $lead = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->addMember($lead, isLead: true);
+    $manager = userWithRole(RoleName::IncidentManager);
+
+    $sev3 = Incident::factory()->forTeam($team)->severity(Severity::Sev3)->create();
+    (new NotifyOnIncidentCreated($this->notifications))->handle(new IncidentCreated($sev3));
+
+    Notification::assertSentTo($lead, IncidentNotice::class);
+    Notification::assertNotSentTo($manager, IncidentNotice::class);
+
+    Notification::fake();
+    $sev1 = Incident::factory()->forTeam($team)->severity(Severity::Sev1)->create();
+    (new NotifyOnIncidentCreated($this->notifications))->handle(new IncidentCreated($sev1));
+
+    Notification::assertSentTo([$lead, $manager], IncidentNotice::class);
+});
+
+it('notifies the team lead when an incident is reported through the API', function () {
+    Notification::fake();
+    $lead = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->addMember($lead, isLead: true);
+    $service = Service::factory()->for($team, 'ownerTeam')->create();
+    RoutingRule::factory()->create(['team_id' => null, 'priority' => 99]);
+    actingAsRole(RoleName::Reporter);
+
+    $this->postJson('/api/v1/incidents', [
+        'title' => 'Deposits failing on the payment gateway',
+        'description' => 'Callbacks time out since 08:55',
+        'service_id' => $service->id,
+        'category_id' => Category::factory()->create()->id,
+        'severity' => 2,
+    ])->assertCreated();
+
+    Notification::assertSentTo($lead, IncidentNotice::class);
 });

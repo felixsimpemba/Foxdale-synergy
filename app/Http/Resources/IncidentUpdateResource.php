@@ -29,6 +29,7 @@ class IncidentUpdateResource extends JsonResource
             'visibility' => $this->visibility,
             'author' => $deleted ? null : $this->whenLoaded('user', fn () => $this->user === null ? null : ['id' => $this->user->id, 'name' => $this->user->name]),
             'attachments' => $deleted ? [] : AttachmentResource::collection($this->whenLoaded('attachments')),
+            'mentions' => $deleted ? [] : $this->whenLoaded('mentions', fn () => $this->mentions->map(fn ($person): array => ['id' => $person->id, 'name' => $person->name])),
             'replies' => self::collection($this->whenLoaded('replies')),
             'is_deleted' => $deleted,
             'edited_at' => $this->edited_at?->toIso8601ZuluString(),

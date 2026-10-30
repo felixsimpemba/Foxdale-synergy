@@ -11,6 +11,9 @@ use App\Models\Incident;
 use App\Models\IncidentUpdate;
 use App\Models\User;
 use App\Services\DocumentService;
+use App\Services\Mentions\Mentioner;
+use App\Services\Mentions\MentionNotifier;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -28,7 +31,11 @@ use Throwable;
  */
 class PostIncidentUpdate
 {
-    public function __construct(private DocumentService $documents) {}
+    public function __construct(
+        private DocumentService $documents,
+        private Mentioner $mentioner,
+        private MentionNotifier $mentionNotifier,
+    ) {}
 
     /**
      * @param  list<UploadedFile>  $attachments  stored as incident documents linked to the update
@@ -50,11 +57,15 @@ class PostIncidentUpdate
             $visibility = $thread->visibility;
         }
 
+        $mentioned = $author === null
+            ? new Collection
+            : $this->mentioner->mentionedIn($body, $this->mentioner->mentionable($incident, $author));
+
         /** @var list<Document> $stored */
         $stored = [];
 
         try {
-            $update = DB::transaction(function () use ($incident, $author, $body, $type, $visibility, $thread, $attachments, &$stored): IncidentUpdate {
+            $update = DB::transaction(function () use ($incident, $author, $body, $type, $visibility, $thread, $attachments, $mentioned, &$stored): IncidentUpdate {
                 $update = $incident->updates()->create([
                     'parent_id' => $thread?->id,
                     'user_id' => $author?->id,
@@ -62,6 +73,10 @@ class PostIncidentUpdate
                     'body' => $body,
                     'visibility' => $visibility,
                 ]);
+
+                if ($mentioned->isNotEmpty()) {
+                    $update->mentions()->sync($mentioned->modelKeys());
+                }
 
                 foreach ($attachments as $file) {
                     $stored[] = $this->documents->upload($incident, $author ?? throw new LogicException('Attachments need an author.'), $file, [
@@ -84,6 +99,10 @@ class PostIncidentUpdate
 
         UpdatePosted::dispatch($update, $notifyChannels);
 
-        return $update;
+        if ($author !== null) {
+            $this->mentionNotifier->notify($incident, $update, $author, $mentioned, $body);
+        }
+
+        return $update->load('mentions');
     }
 }

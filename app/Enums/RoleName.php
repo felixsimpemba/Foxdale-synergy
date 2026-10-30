@@ -26,6 +26,9 @@ enum RoleName: string
             PermissionKey::IncidentViewOwn,
             PermissionKey::IncidentUpdate,
             PermissionKey::DocumentUpload,
+            PermissionKey::ProjectView,
+            PermissionKey::TaskCreate,
+            PermissionKey::TaskUpdate,
         ];
 
         $responder = [
@@ -33,6 +36,8 @@ enum RoleName: string
             PermissionKey::IncidentViewTeam,
             PermissionKey::IncidentAcknowledge,
             PermissionKey::IncidentTransition,
+            PermissionKey::TaskAssign,
+            PermissionKey::TaskReview,
             PermissionKey::TimeLog,
             PermissionKey::ResolutionWrite,
             PermissionKey::RcaWrite,
@@ -54,6 +59,9 @@ enum RoleName: string
             PermissionKey::RcaApprove,
             PermissionKey::IncidentClose,
             PermissionKey::IncidentDelete,
+            PermissionKey::ProjectManage,
+            PermissionKey::TaskReview,
+            PermissionKey::TaskDelete,
             PermissionKey::DocumentDelete,
             PermissionKey::KnowledgePublish,
             PermissionKey::ReportExport,

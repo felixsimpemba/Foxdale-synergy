@@ -38,7 +38,7 @@ class IncidentTimelineService
         $threads = $incident->updates()
             ->withTrashed()
             ->whereNull('parent_id')
-            ->with(['user', 'attachments', 'replies' => fn ($query) => $query->with('user', 'attachments')])
+            ->with(['user', 'attachments', 'mentions', 'replies' => fn ($query) => $query->with('user', 'attachments', 'mentions')])
             ->orderBy('created_at')
             ->orderBy('id')
             ->get()
@@ -118,6 +118,9 @@ class IncidentTimelineService
             'is_deleted' => $deleted,
             'edited_at' => $update->edited_at?->toIso8601ZuluString(),
             'attachments' => $deleted ? [] : AttachmentResource::collection($update->attachments)->resolve(),
+            'mentions' => $deleted
+                ? []
+                : $update->mentions->map(fn (User $person): array => ['id' => $person->id, 'name' => $person->name])->values()->all(),
         ];
     }
 
