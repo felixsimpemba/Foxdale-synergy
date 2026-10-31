@@ -21,11 +21,13 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
     /**
-     * Filters: q (name or email), role, team_id, is_active.
+     * Filters: q (name or email), role, team_id, is_active, archived (only archived users).
      */
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -33,6 +35,7 @@ class UserController extends Controller
 
         $users = User::query()
             ->with('roles', 'teams')
+            ->when($request->boolean('archived'), fn (Builder $query) => $query->onlyTrashed())
             ->when($request->filled('q'), fn (Builder $query) => $query->where(fn (Builder $query) => $query
                 ->where('name', 'like', '%'.$request->string('q').'%')
                 ->orWhere('email', 'like', '%'.$request->string('q').'%')))
@@ -91,23 +94,66 @@ class UserController extends Controller
     /**
      * Disable login and revoke every token at once.
      */
-    public function deactivate(User $user): UserResource
+    public function deactivate(User $user, AuditLogger $audit): UserResource
     {
         Gate::authorize('changeStatus', $user);
+
+        if ($this->isLastActiveAdmin($user)) {
+            throw new ApiException('At least one active admin must remain.', 'last_admin');
+        }
 
         DB::transaction(function () use ($user): void {
             $user->forceFill(['is_active' => false])->save();
             $user->tokens()->delete();
         });
 
+        $audit->record('user.deactivated', $user);
+
         return new UserResource($user->load('roles', 'teams'));
     }
 
-    public function activate(User $user): UserResource
+    public function activate(User $user, AuditLogger $audit): UserResource
     {
         Gate::authorize('changeStatus', $user);
 
         $user->forceFill(['is_active' => true])->save();
+        $audit->record('user.activated', $user);
+
+        return new UserResource($user->load('roles', 'teams'));
+    }
+
+    /**
+     * Archive the account: sign the person out, hide them from lists and pickers, and keep
+     * every incident, comment and audit entry attached. Restore brings the account back.
+     */
+    public function destroy(User $user, AuditLogger $audit): UserResource
+    {
+        Gate::authorize('delete', $user);
+
+        if ($this->isLastActiveAdmin($user)) {
+            throw new ApiException('At least one active admin must remain.', 'last_admin');
+        }
+
+        DB::transaction(function () use ($user): void {
+            $user->tokens()->delete();
+            $user->delete();
+        });
+
+        $audit->record('user.archived', $user);
+
+        return new UserResource($user->load('roles', 'teams'));
+    }
+
+    public function restore(User $user, AuditLogger $audit): UserResource
+    {
+        Gate::authorize('restore', $user);
+
+        if (! $user->trashed()) {
+            throw new ApiException('This account is not archived.', 'not_archived');
+        }
+
+        $user->restore();
+        $audit->record('user.restored', $user);
 
         return new UserResource($user->load('roles', 'teams'));
     }
@@ -158,6 +204,58 @@ class UserController extends Controller
     }
 
     /**
+     * Email a reset link so the person chooses a new password. The admin never sees it.
+     */
+    public function sendPasswordReset(User $user, AuditLogger $audit): UserResource
+    {
+        Gate::authorize('sendPasswordReset', $user);
+
+        if (! $user->is_active) {
+            throw new ApiException('Reactivate the account before sending a password reset.', 'user_inactive');
+        }
+
+        $status = Password::broker('users')->sendResetLink(['email' => $user->email]);
+
+        if ($status === Password::RESET_THROTTLED) {
+            throw new ApiException('A reset email was sent recently. Wait a minute before sending another.', 'password_reset_throttled', 429);
+        }
+
+        if ($status !== Password::RESET_LINK_SENT) {
+            throw new ApiException('The password reset email could not be sent.', 'password_reset_failed');
+        }
+
+        $audit->record('user.password_reset_sent', $user);
+
+        return new UserResource($user->load('roles', 'teams'));
+    }
+
+    /**
+     * Sign the person out on every device without changing their password or status.
+     */
+    public function revokeSessions(User $user, AuditLogger $audit): UserResource
+    {
+        Gate::authorize('revokeSessions', $user);
+
+        $revoked = $user->tokens()->delete();
+        $audit->record('user.sessions_revoked', $user, ['tokens_revoked' => $revoked]);
+
+        return new UserResource($user->load('roles', 'teams'));
+    }
+
+    /**
+     * Login lockouts are keyed by email in the rate limiter, with no expiry visible in the app.
+     */
+    public function clearLockout(User $user, AuditLogger $audit): UserResource
+    {
+        Gate::authorize('clearLockout', $user);
+
+        RateLimiter::clear('login-lockout:'.Str::lower($user->email));
+        $audit->record('user.lockout_cleared', $user);
+
+        return new UserResource($user->load('roles', 'teams'));
+    }
+
+    /**
      * @param  list<string>  $newRoles
      */
     private function wouldRemoveLastAdmin(User $user, array $newRoles): bool
@@ -169,5 +267,15 @@ class UserController extends Controller
         }
 
         return User::role($admin)->where('is_active', true)->whereKeyNot($user->id)->doesntExist();
+    }
+
+    /**
+     * True when deactivating or archiving this person would leave no active admin.
+     */
+    private function isLastActiveAdmin(User $user): bool
+    {
+        return $user->is_active
+            && $user->hasRole(RoleName::Admin->value)
+            && User::role(RoleName::Admin->value)->where('is_active', true)->whereKeyNot($user->id)->doesntExist();
     }
 }

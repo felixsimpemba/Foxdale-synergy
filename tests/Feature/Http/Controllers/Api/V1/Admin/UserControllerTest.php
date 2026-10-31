@@ -4,8 +4,10 @@ use App\Enums\RoleName;
 use App\Models\AuditLog;
 use App\Models\Team;
 use App\Models\User;
+use App\Notifications\PasswordResetLink;
 use App\Notifications\UserInvited;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Sanctum\Sanctum;
 
 describe('index', function () {
@@ -114,6 +116,19 @@ describe('store', function () {
             'name' => 'Jane', 'email' => 'jane@example.com', 'roles' => ['superuser'],
         ])->assertUnprocessable()->assertJsonValidationErrors('roles.0');
     });
+
+    it('keeps the email of an archived account reserved and explains how to restore it', function () {
+        actingAsRole(RoleName::Admin);
+        $archived = User::factory()->create(['email' => 'gone@example.com']);
+        $archived->delete();
+
+        $this->postJson('/api/v1/admin/users', [
+            'name' => 'New Person',
+            'email' => 'gone@example.com',
+            'roles' => ['reporter'],
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.email.0', 'This email is already in use. If it belongs to an archived account, restore that account instead.');
+    });
 });
 
 describe('update', function () {
@@ -136,6 +151,182 @@ describe('update', function () {
         $this->putJson("/api/v1/admin/users/{$user->id}", ['email' => 'taken@example.com'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('email');
+    });
+
+    it('audits profile changes', function () {
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->create();
+
+        $this->putJson("/api/v1/admin/users/{$user->id}", ['timezone' => 'Europe/London'])->assertOk();
+
+        $log = AuditLog::firstWhere('action', 'user.updated');
+        expect($log->entity_id)->toBe($user->id)
+            ->and($log->changes['after'])->toHaveKey('timezone', 'Europe/London');
+    });
+});
+
+describe('archive', function () {
+    it('archives the account, revokes tokens and keeps history', function () {
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->create();
+        $user->createToken('session:web', ['*']);
+
+        $this->deleteJson("/api/v1/admin/users/{$user->id}")
+            ->assertOk()
+            ->assertJsonPath('data.is_active', true)
+            ->assertJsonPath('data.archived_at', fn (mixed $value): bool => $value !== null);
+
+        expect(User::find($user->id))->toBeNull()
+            ->and(User::withTrashed()->find($user->id)->trashed())->toBeTrue()
+            ->and($user->tokens()->count())->toBe(0);
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'user.archived', 'entity_id' => $user->id]);
+    });
+
+    it('keeps archived users out of the default list and shows them in the archived filter', function () {
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->create(['name' => 'Archived Person']);
+        $user->delete();
+
+        $this->getJson('/api/v1/admin/users?q=Archived+Person')
+            ->assertOk()
+            ->assertJsonPath('data', []);
+
+        $this->getJson('/api/v1/admin/users?q=Archived+Person&archived=1')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $user->id)
+            ->assertJsonPath('data.0.archived_at', fn (mixed $value): bool => $value !== null);
+    });
+
+    it('shows an archived user and restores them', function () {
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->create();
+        $user->delete();
+
+        $this->getJson("/api/v1/admin/users/{$user->id}")
+            ->assertOk()
+            ->assertJsonPath('data.archived_at', fn (mixed $value): bool => $value !== null);
+
+        $this->postJson("/api/v1/admin/users/{$user->id}/restore")
+            ->assertOk()
+            ->assertJsonPath('data.archived_at', null);
+
+        expect(User::find($user->id))->not->toBeNull();
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'user.restored', 'entity_id' => $user->id]);
+    });
+
+    it('returns 422 not_archived when restoring someone who is not archived', function () {
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->create();
+
+        $this->postJson("/api/v1/admin/users/{$user->id}/restore")
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'not_archived');
+    });
+
+    it('does not let an admin archive themselves', function () {
+        $admin = actingAsRole(RoleName::Admin);
+
+        $this->deleteJson("/api/v1/admin/users/{$admin->id}")->assertForbidden();
+    });
+
+    it('returns 422 last_admin when archiving the only active admin', function () {
+        $actor = User::factory()->create();
+        $actor->givePermissionTo('user.manage');
+        Sanctum::actingAs($actor, ['*']);
+        $admin = userWithRole(RoleName::Admin);
+
+        $this->deleteJson("/api/v1/admin/users/{$admin->id}")
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'last_admin');
+
+        expect(User::find($admin->id))->not->toBeNull();
+    });
+
+    it('blocks sign-in for an archived account', function () {
+        $user = User::factory()->create(['email' => 'gone@example.com']);
+        $user->delete();
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'gone@example.com',
+            'password' => 'password',
+            'device_name' => 'web',
+        ])->assertUnprocessable()->assertJsonValidationErrors('email');
+    });
+});
+
+describe('password reset', function () {
+    it('emails a reset link and audits it', function () {
+        Notification::fake();
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->create();
+
+        $this->postJson("/api/v1/admin/users/{$user->id}/password-reset")->assertOk();
+
+        Notification::assertSentTo($user, PasswordResetLink::class);
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'user.password_reset_sent', 'entity_id' => $user->id]);
+    });
+
+    it('returns 422 user_inactive for a deactivated account', function () {
+        Notification::fake();
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->inactive()->create();
+
+        $this->postJson("/api/v1/admin/users/{$user->id}/password-reset")
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'user_inactive');
+
+        Notification::assertNothingSent();
+    });
+
+    it('does not let an admin send a reset to themselves', function () {
+        $admin = actingAsRole(RoleName::Admin);
+
+        $this->postJson("/api/v1/admin/users/{$admin->id}/password-reset")->assertForbidden();
+    });
+});
+
+describe('sessions and lockout', function () {
+    it('signs the person out everywhere', function () {
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->create();
+        $user->createToken('session:web', ['*']);
+        $user->createToken('script', ['mcp:read']);
+
+        $this->postJson("/api/v1/admin/users/{$user->id}/revoke-sessions")
+            ->assertOk()
+            ->assertJsonPath('data.id', $user->id);
+
+        expect($user->tokens()->count())->toBe(0);
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'user.sessions_revoked', 'entity_id' => $user->id]);
+    });
+
+    it('clears a login lockout', function () {
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->create(['email' => 'locked@example.com']);
+        $key = 'login-lockout:locked@example.com';
+
+        foreach (range(1, 5) as $attempt) {
+            RateLimiter::hit($key, 900);
+        }
+
+        expect(RateLimiter::tooManyAttempts($key, 5))->toBeTrue();
+
+        $this->postJson("/api/v1/admin/users/{$user->id}/unlock")->assertOk();
+
+        expect(RateLimiter::tooManyAttempts($key, 5))->toBeFalse();
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'user.lockout_cleared', 'entity_id' => $user->id]);
+    });
+
+    it('audits deactivation and reactivation', function () {
+        actingAsRole(RoleName::Admin);
+        $user = User::factory()->create();
+
+        $this->postJson("/api/v1/admin/users/{$user->id}/deactivate")->assertOk();
+        $this->postJson("/api/v1/admin/users/{$user->id}/activate")->assertOk();
+
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'user.deactivated', 'entity_id' => $user->id]);
+        $this->assertDatabaseHas(AuditLog::class, ['action' => 'user.activated', 'entity_id' => $user->id]);
     });
 });
 

@@ -1,91 +1,23 @@
-name: CI/CD
+name: Deploy
 
-# Tests, style and static analysis on every push and pull request. When main is green,
-# deploy to the server over SSH (only if DEPLOY_ENABLED=true; see the notes at the bottom).
+# Ships the backend to the server over SSH on every push to main (or a manual run).
+# Tests are not run in this workflow; run them locally with `php artisan test`.
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  # One run per branch. Pull requests cancel older runs; main never cancels a deploy.
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
-  DB_CONNECTION: mysql
-  DB_HOST: 127.0.0.1
-  DB_PORT: 3306
-  DB_DATABASE: foxdale_incidents_test
-  DB_USERNAME: foxdale
-  DB_PASSWORD: secret
+  # Never run two production deploys at the same time.
+  group: deploy-production
+  cancel-in-progress: false
 
 jobs:
-  test:
-    name: Tests, style and static analysis
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: secret
-          MYSQL_DATABASE: foxdale_incidents_test
-          MYSQL_USER: foxdale
-          MYSQL_PASSWORD: secret
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h localhost -psecret"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          extensions: mbstring, pdo_mysql, bcmath, intl, zip, gd, curl
-          coverage: none
-
-      - name: Cache Composer downloads
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/composer
-          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-${{ runner.os }}-
-
-      - name: Install dependencies
-        run: composer install --no-interaction --prefer-dist --no-progress --optimize-autoloader
-
-      - name: Prepare environment
-        run: |
-          cp .env.example .env
-          php artisan key:generate --ansi
-
-      - name: Code style (Pint)
-        run: vendor/bin/pint --test
-
-      - name: Static analysis (Larastan)
-        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
-
-      - name: Tests (Pest)
-        run: php artisan test --compact --log-junit junit.xml
-
-      - name: Report failing tests
-        if: failure()
-        run: php .github/scripts/annotate-failures.php junit.xml
-
   deploy:
     name: Deploy to production
-    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -97,10 +29,6 @@ jobs:
       && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
     environment: production
-
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
 
     steps:
       - uses: actions/checkout@v5

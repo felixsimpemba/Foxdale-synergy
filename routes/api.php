@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Admin\SettingController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
+use App\Http\Controllers\Api\V1\Auth\SessionController;
 use App\Http\Controllers\Api\V1\Auth\TokenController;
 use App\Http\Controllers\Api\V1\Auth\TwoFactorController;
 use App\Http\Controllers\Api\V1\CategoryController;
@@ -84,6 +85,10 @@ Route::prefix('v1')->name('v1.')->group(function () {
                 Route::delete('two-factor', [TwoFactorController::class, 'destroy'])->name('two-factor.destroy');
 
                 Route::middleware('two-factor')->group(function () {
+                    Route::get('sessions', [SessionController::class, 'index'])->name('sessions.index');
+                    Route::delete('sessions', [SessionController::class, 'destroyOthers'])->name('sessions.destroy-others');
+                    Route::delete('sessions/{tokenId}', [SessionController::class, 'destroy'])->whereNumber('tokenId')->name('sessions.destroy');
+
                     Route::get('tokens', [TokenController::class, 'index'])->name('tokens.index');
                     Route::post('tokens', [TokenController::class, 'store'])->name('tokens.store');
                     Route::delete('tokens/{tokenId}', [TokenController::class, 'destroy'])->whereNumber('tokenId')->name('tokens.destroy');
@@ -279,12 +284,17 @@ Route::prefix('v1')->name('v1.')->group(function () {
                 Route::prefix('admin')->name('admin.')->group(function () {
                     Route::get('users', [UserController::class, 'index'])->name('users.index');
                     Route::post('users', [UserController::class, 'store'])->name('users.store');
-                    Route::get('users/{user}', [UserController::class, 'show'])->name('users.show');
+                    Route::get('users/{user}', [UserController::class, 'show'])->withTrashed()->name('users.show');
                     Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+                    Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+                    Route::post('users/{user}/restore', [UserController::class, 'restore'])->withTrashed()->name('users.restore');
                     Route::post('users/{user}/roles', [UserController::class, 'assignRoles'])->name('users.roles');
                     Route::post('users/{user}/deactivate', [UserController::class, 'deactivate'])->name('users.deactivate');
                     Route::post('users/{user}/activate', [UserController::class, 'activate'])->name('users.activate');
                     Route::post('users/{user}/resend-invite', [UserController::class, 'resendInvite'])->name('users.resend-invite');
+                    Route::post('users/{user}/password-reset', [UserController::class, 'sendPasswordReset'])->name('users.password-reset');
+                    Route::post('users/{user}/revoke-sessions', [UserController::class, 'revokeSessions'])->name('users.revoke-sessions');
+                    Route::post('users/{user}/unlock', [UserController::class, 'clearLockout'])->name('users.unlock');
                     Route::delete('users/{user}/two-factor', [UserController::class, 'resetTwoFactor'])->name('users.two-factor.reset');
 
                     Route::get('roles', [RoleController::class, 'index'])->name('roles.index');

@@ -32,6 +32,9 @@ class UpdateUserRequest extends FormRequest
      */
     public function messages(): array
     {
-        return ['phone.regex' => 'The phone number must be in E.164 format, for example +260971234567.'];
+        return [
+            'phone.regex' => 'The phone number must be in E.164 format, for example +260971234567.',
+            'email.unique' => 'This email is already in use. If it belongs to an archived account, restore that account instead.',
+        ];
     }
 }

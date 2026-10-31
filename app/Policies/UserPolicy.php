@@ -39,4 +39,35 @@ class UserPolicy
     {
         return $user->can(PermissionKey::UserManage->value) && $user->isNot($model);
     }
+
+    /**
+     * Archive (soft delete). Nobody can archive themselves.
+     */
+    public function delete(User $user, User $model): bool
+    {
+        return $user->can(PermissionKey::UserManage->value) && $user->isNot($model);
+    }
+
+    public function restore(User $user, User $model): bool
+    {
+        return $user->can(PermissionKey::UserManage->value);
+    }
+
+    /**
+     * Admins send reset links to other people; their own password is changed from My account.
+     */
+    public function sendPasswordReset(User $user, User $model): bool
+    {
+        return $user->can(PermissionKey::UserManage->value) && $user->isNot($model);
+    }
+
+    public function revokeSessions(User $user, User $model): bool
+    {
+        return $user->can(PermissionKey::UserManage->value) && $user->isNot($model);
+    }
+
+    public function clearLockout(User $user, User $model): bool
+    {
+        return $user->can(PermissionKey::UserManage->value) && $user->isNot($model);
+    }
 }

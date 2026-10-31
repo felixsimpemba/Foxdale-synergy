@@ -24,6 +24,7 @@ class UserResource extends JsonResource
             'mattermost_username' => $this->mattermost_username,
             'timezone' => $this->timezone,
             'is_active' => $this->is_active,
+            'archived_at' => $this->deleted_at?->toIso8601ZuluString(),
             'two_factor_enabled' => $this->hasTwoFactorEnabled(),
             'last_login_at' => $this->last_login_at?->toIso8601ZuluString(),
             'roles' => $this->whenLoaded('roles', fn () => $this->roles->pluck('name')->values()),

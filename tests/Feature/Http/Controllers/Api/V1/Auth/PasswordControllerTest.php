@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\PasswordResetLink;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
@@ -13,7 +13,7 @@ describe('forgot', function () {
 
         $this->postJson('/api/v1/auth/forgot-password', ['email' => 'jane@example.com'])->assertOk();
 
-        Notification::assertSentTo($user, ResetPassword::class, function (ResetPassword $notification) use ($user) {
+        Notification::assertSentTo($user, PasswordResetLink::class, function (PasswordResetLink $notification) use ($user) {
             return str_starts_with($notification->toMail($user)->actionUrl, 'http://localhost:3000/reset-password?token=');
         });
     });

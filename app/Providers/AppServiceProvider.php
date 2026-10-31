@@ -31,7 +31,6 @@ use App\Services\Notifications\PushSender;
 use App\Services\Notifications\WebPushSender;
 use App\Services\Scanning\NullVirusScanner;
 use App\Services\Scanning\VirusScanner;
-use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -102,9 +101,6 @@ class AppServiceProvider extends ServiceProvider
         ));
 
         Password::defaults(fn () => Password::min(12)->uncompromised());
-
-        ResetPassword::createUrlUsing(fn (User $user, string $token): string => config('incidents.frontend_url')
-            .'/reset-password?'.http_build_query(['token' => $token, 'email' => $user->email]));
 
         $this->configureRateLimiting();
         $this->bustDashboardCacheOnChanges();
