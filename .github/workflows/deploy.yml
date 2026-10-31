@@ -56,16 +56,30 @@ jobs:
           fi
 
           mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
 
-          if ! head -c 11 ~/.ssh/id_deploy | grep -q -- '-----BEGIN '; then
-            echo "::error title=SSH_PRIVATE_KEY is not a private key file::The secret must be the private key (no .pub), starting with -----BEGIN OPENSSH PRIVATE KEY-----."
-            exit 1
+          # Secrets are often pasted with surrounding quotes, CRLF line endings or
+          # literal "\n" sequences. Normalise all three before checking the key.
+          key="$SSH_PRIVATE_KEY"
+          key="${key#\"}"; key="${key%\"}"
+          key="${key#\'}"; key="${key%\'}"
+          key="${key//\\n/$'\n'}"
+          printf '%s\n' "$key" > ~/.ssh/id_deploy
+          sed -i -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' ~/.ssh/id_deploy
+          sed -i '/./,$!d' ~/.ssh/id_deploy
+
+          # Some people store the key base64-encoded. Decode it if the text is not
+          # already a private key.
+          if ! grep -q -- '-----BEGIN .*PRIVATE KEY-----' ~/.ssh/id_deploy; then
+            if base64 -d ~/.ssh/id_deploy > ~/.ssh/id_decoded 2>/dev/null \
+              && grep -q -- '-----BEGIN .*PRIVATE KEY-----' ~/.ssh/id_decoded; then
+              mv ~/.ssh/id_decoded ~/.ssh/id_deploy
+            fi
           fi
 
-          if grep -q '\\n' ~/.ssh/id_deploy; then
-            echo "::error title=SSH_PRIVATE_KEY contains literal backslash-n::The line breaks were escaped. Set it with \`gh secret set SSH_PRIVATE_KEY < ~/.ssh/your_key\` or paste the file with real line breaks."
+          chmod 600 ~/.ssh/id_deploy
+
+          if ! grep -q -- '-----BEGIN .*PRIVATE KEY-----' ~/.ssh/id_deploy; then
+            echo "::error title=SSH_PRIVATE_KEY is not a private key file::The secret must be the private key (no .pub), starting with -----BEGIN OPENSSH PRIVATE KEY-----."
             exit 1
           fi
 
