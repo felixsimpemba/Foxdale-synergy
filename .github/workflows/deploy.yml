@@ -125,6 +125,11 @@ jobs:
 
           composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
           php artisan migrate --force
+
+          # New permission keys (for example project.view) must be granted to the
+          # default roles after every deploy. The seeder is safe to re-run.
+          php artisan db:seed --class=RolesAndPermissionsSeeder --force
+
           php artisan optimize
           php artisan queue:restart
 
