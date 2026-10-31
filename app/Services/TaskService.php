@@ -347,6 +347,36 @@ class TaskService
         });
     }
 
+    /**
+     * Move a task between sprints, used when a sprint is completed. The task keeps its
+     * status and lands at the end of the matching column in the target sprint.
+     */
+    public function moveToSprint(Task $task, ?Sprint $sprint, ?User $actor = null): Task
+    {
+        if ($sprint !== null) {
+            $project = Project::query()->findOrFail($task->project_id);
+            $this->assertSprint($project, $sprint->id);
+        }
+
+        if ($task->sprint_id === $sprint?->id) {
+            return $task;
+        }
+
+        $from = $task->sprint_id;
+
+        $task->forceFill([
+            'sprint_id' => $sprint?->id,
+            'position' => $this->nextPosition($task->project_id, $sprint?->id, $task->status, $task->id),
+        ])->save();
+
+        $this->record($task, $actor, TaskActivityType::SprintChanged, $this->sprintName($from), $this->sprintName($sprint?->id), [
+            'from_sprint_id' => $from,
+            'to_sprint_id' => $sprint?->id,
+        ]);
+
+        return $task->refresh();
+    }
+
     public function delete(Task $task): void
     {
         if ($task->subtasks()->exists()) {

@@ -141,6 +141,14 @@ class Task extends Model
         return $this->hasMany(TaskActivity::class)->orderBy('created_at')->orderBy('id');
     }
 
+    /**
+     * @return HasMany<TaskComment, $this>
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(TaskComment::class)->orderBy('created_at')->orderBy('id');
+    }
+
     public function isFinished(): bool
     {
         return $this->status === TaskStatus::Done;

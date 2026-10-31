@@ -63,12 +63,17 @@ class TaskPolicy
     {
         $project = $this->projectOf($task);
 
-        return $this->visibleAnd(
-            $user,
-            $task,
-            PermissionKey::TaskReview,
-            $task->reviewer_id === $user->id || $project->canBeManagedBy($user),
-        );
+        if (! $project->isVisibleTo($user)) {
+            return Response::denyAsNotFound();
+        }
+
+        // The assigned reviewer is authorised by the assignment itself. The global
+        // task.review permission is for managers who decide tasks they were not assigned.
+        $isAssignedReviewer = $task->reviewer_id === $user->id;
+        $isManager = $user->can(PermissionKey::TaskReview->value)
+            && $project->canBeManagedBy($user);
+
+        return $isAssignedReviewer || $isManager ? Response::allow() : Response::deny();
     }
 
     public function delete(User $user, Task $task): Response

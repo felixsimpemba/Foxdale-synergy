@@ -7,6 +7,7 @@ use App\Enums\TaskStatus;
 use App\Models\Project;
 use App\Models\Sprint;
 use App\Models\Task;
+use App\Models\TaskActivity;
 
 describe('index and store', function () {
     it('lists sprints with their task counts', function () {
@@ -107,5 +108,104 @@ describe('update and destroy', function () {
         $this->deleteJson("/api/v1/sprints/{$sprint->id}")
             ->assertStatus(409)
             ->assertJsonPath('code', 'sprint_not_planned');
+    });
+});
+
+describe('lifecycle', function () {
+    it('starts a planned sprint and refuses a second active one', function () {
+        actingAsRole(RoleName::IncidentManager);
+        $project = Project::factory()->create();
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'state' => SprintState::Planned,
+            'starts_on' => null,
+            'ends_on' => null,
+        ]);
+        $other = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'state' => SprintState::Planned,
+        ]);
+
+        $this->postJson("/api/v1/sprints/{$sprint->id}/start")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'active');
+
+        expect($sprint->fresh()->starts_on)->not->toBeNull();
+
+        $this->postJson("/api/v1/sprints/{$other->id}/start")
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'sprint_already_active');
+    });
+
+    it('completes the active sprint and returns unfinished tasks to the backlog', function () {
+        actingAsRole(RoleName::IncidentManager);
+        $project = Project::factory()->create();
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'state' => SprintState::Active,
+        ]);
+        $done = Task::factory()->inSprint($sprint)->inStatus(TaskStatus::Done)->create();
+        $open = Task::factory()->inSprint($sprint)->create();
+
+        $this->postJson("/api/v1/sprints/{$sprint->id}/complete")
+            ->assertOk()
+            ->assertJsonPath('data.state', 'completed');
+
+        expect($open->fresh()->sprint_id)->toBeNull()
+            ->and($done->fresh()->sprint_id)->toBe($sprint->id);
+
+        $this->assertDatabaseHas(TaskActivity::class, [
+            'task_id' => $open->id,
+            'type' => 'sprint_changed',
+        ]);
+    });
+
+    it('can send unfinished tasks to another planned sprint', function () {
+        actingAsRole(RoleName::IncidentManager);
+        $project = Project::factory()->create();
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'state' => SprintState::Active,
+        ]);
+        $next = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'state' => SprintState::Planned,
+        ]);
+        $open = Task::factory()->inSprint($sprint)->create();
+
+        $this->postJson("/api/v1/sprints/{$sprint->id}/complete", [
+            'move_unfinished_to' => (string) $next->id,
+        ])->assertOk();
+
+        expect($open->fresh()->sprint_id)->toBe($next->id);
+    });
+
+    it('refuses to complete a planned sprint', function () {
+        actingAsRole(RoleName::IncidentManager);
+        $sprint = Sprint::factory()->create(['state' => SprintState::Planned]);
+
+        $this->postJson("/api/v1/sprints/{$sprint->id}/complete")
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'sprint_not_active');
+    });
+
+    it('refuses to start a completed sprint', function () {
+        actingAsRole(RoleName::IncidentManager);
+        $sprint = Sprint::factory()->completed()->create();
+
+        $this->postJson("/api/v1/sprints/{$sprint->id}/start")
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'sprint_not_planned');
+    });
+
+    it('does not let a plain member start a sprint', function () {
+        $actor = actingAsRole(RoleName::Reporter);
+        $project = Project::factory()->withMember($actor, ProjectMemberRole::Member)->create();
+        $sprint = Sprint::factory()->create([
+            'project_id' => $project->id,
+            'state' => SprintState::Planned,
+        ]);
+
+        $this->postJson("/api/v1/sprints/{$sprint->id}/start")->assertForbidden();
     });
 });

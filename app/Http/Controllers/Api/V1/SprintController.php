@@ -6,11 +6,14 @@ use App\Enums\SprintState;
 use App\Enums\TaskStatus;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Projects\CompleteSprintRequest;
+use App\Http\Requests\Projects\StartSprintRequest;
 use App\Http\Requests\Projects\StoreSprintRequest;
 use App\Http\Requests\Projects\UpdateSprintRequest;
 use App\Http\Resources\SprintResource;
 use App\Models\Project;
 use App\Models\Sprint;
+use App\Services\SprintService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -18,11 +21,13 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Sprint CRUD. Starting and completing sprints is the next slice; this one keeps planned
- * sprints editable and refuses to delete work that is already in flight.
+ * Sprint CRUD and lifecycle. Completing a sprint sends unfinished work to the backlog or
+ * another planned sprint; deleting planned sprints returns their tasks to the backlog.
  */
 class SprintController extends Controller
 {
+    public function __construct(private SprintService $sprintService) {}
+
     public function index(Project $project): AnonymousResourceCollection
     {
         Gate::authorize('view', $project);
@@ -73,6 +78,26 @@ class SprintController extends Controller
         $sprint->update($request->validated());
 
         return new SprintResource($sprint->refresh());
+    }
+
+    public function start(StartSprintRequest $request, Sprint $sprint): SprintResource
+    {
+        $project = Project::query()->findOrFail($sprint->project_id);
+        Gate::authorize('manageSprints', $project);
+
+        $sprint = $this->sprintService->start($sprint, $request->user(), $request->validated());
+
+        return new SprintResource($sprint);
+    }
+
+    public function complete(CompleteSprintRequest $request, Sprint $sprint): SprintResource
+    {
+        $project = Project::query()->findOrFail($sprint->project_id);
+        Gate::authorize('manageSprints', $project);
+
+        $sprint = $this->sprintService->complete($sprint, $request->user(), $request->validated());
+
+        return new SprintResource($sprint);
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Task;
 use App\Models\TaskActivity;
+use App\Models\TaskComment;
 use Illuminate\Support\Collection;
 
 /**
@@ -19,7 +20,7 @@ class TaskTimelineService
     {
         $task->load('activities.user');
 
-        return $task->activities
+        $activities = $task->activities
             ->map(fn (TaskActivity $activity): array => [
                 'type' => $activity->type->value,
                 'at' => $activity->created_at?->toIso8601ZuluString() ?? '',
@@ -32,7 +33,31 @@ class TaskTimelineService
                     'to' => $activity->to_value,
                     ...($activity->meta ?? []),
                 ],
-            ])
+            ]);
+
+        $comments = $task->comments()
+            ->withTrashed()
+            ->with('user')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (TaskComment $comment): array => [
+                'type' => 'comment',
+                'at' => $comment->created_at?->toIso8601ZuluString() ?? '',
+                'actor' => $comment->trashed() || $comment->user === null ? null : [
+                    'id' => $comment->user->id,
+                    'name' => $comment->user->name,
+                ],
+                'data' => [
+                    'id' => $comment->id,
+                    'body' => $comment->trashed() ? null : $comment->body,
+                    'is_deleted' => $comment->trashed(),
+                    'edited_at' => $comment->edited_at?->toIso8601ZuluString(),
+                ],
+            ]);
+
+        return $activities
+            ->concat($comments)
             ->sortBy('at')
             ->values();
     }

@@ -45,7 +45,7 @@ class ProjectController extends Controller
 
         $query = Project::query()
             ->visibleTo($request->user())
-            ->with(['lead', 'ownerTeam'])
+            ->with(['lead', 'ownerTeam', 'activeSprint', 'members'])
             ->withCount([
                 'members',
                 'tasks',

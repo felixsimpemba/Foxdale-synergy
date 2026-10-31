@@ -40,6 +40,7 @@ use App\Http\Controllers\Api\V1\Routing\RoutingRuleController;
 use App\Http\Controllers\Api\V1\ServiceController;
 use App\Http\Controllers\Api\V1\SlaPolicyController;
 use App\Http\Controllers\Api\V1\SprintController;
+use App\Http\Controllers\Api\V1\TaskCommentController;
 use App\Http\Controllers\Api\V1\TaskController;
 use App\Http\Controllers\Api\V1\TeamController;
 use Illuminate\Support\Facades\Route;
@@ -211,6 +212,8 @@ Route::prefix('v1')->name('v1.')->group(function () {
                 Route::get('sprints/{sprint}', [SprintController::class, 'show'])->name('sprints.show');
                 Route::put('sprints/{sprint}', [SprintController::class, 'update'])->name('sprints.update');
                 Route::delete('sprints/{sprint}', [SprintController::class, 'destroy'])->name('sprints.destroy');
+                Route::post('sprints/{sprint}/start', [SprintController::class, 'start'])->name('sprints.start');
+                Route::post('sprints/{sprint}/complete', [SprintController::class, 'complete'])->name('sprints.complete');
 
                 Route::get('projects/{project}/tasks', [TaskController::class, 'index'])->name('projects.tasks.index');
                 Route::get('projects/{project}/board', [TaskController::class, 'board'])->name('projects.board');
@@ -224,6 +227,10 @@ Route::prefix('v1')->name('v1.')->group(function () {
                 Route::post('tasks/{task}/approve', [TaskController::class, 'approve'])->name('tasks.approve');
                 Route::post('tasks/{task}/request-changes', [TaskController::class, 'requestChanges'])->name('tasks.request-changes');
                 Route::get('tasks/{task}/timeline', [TaskController::class, 'timeline'])->name('tasks.timeline');
+
+                Route::post('tasks/{task}/comments', [TaskCommentController::class, 'store'])->name('tasks.comments.store');
+                Route::put('task-comments/{taskComment}', [TaskCommentController::class, 'update'])->name('task-comments.update');
+                Route::delete('task-comments/{taskComment}', [TaskCommentController::class, 'destroy'])->name('task-comments.destroy');
 
                 Route::post('teams', [TeamController::class, 'store'])->name('teams.store');
                 Route::put('teams/{team}', [TeamController::class, 'update'])->name('teams.update');

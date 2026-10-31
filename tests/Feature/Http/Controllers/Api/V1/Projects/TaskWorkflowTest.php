@@ -202,6 +202,23 @@ describe('review workflow', function () {
         ])->assertForbidden()->assertJsonPath('code', 'self_review');
     });
 
+    it('lets an assigned reviewer approve without the global review permission', function () {
+        $author = userWithRole(RoleName::Reporter);
+        $reviewer = userWithRole(RoleName::Reporter);
+        $project = Project::factory()->withMember($author)->withMember($reviewer)->create();
+        $task = Task::factory()->forProject($project)->create(['reporter_id' => $author->id]);
+
+        Sanctum::actingAs($author, ['*']);
+        $this->postJson("/api/v1/tasks/{$task->id}/request-review", [
+            'reviewer_id' => $reviewer->id,
+        ])->assertOk()->assertJsonPath('data.status', 'in_review');
+
+        Sanctum::actingAs($reviewer, ['*']);
+        $this->postJson("/api/v1/tasks/{$task->id}/approve")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'done');
+    });
+
     it('only accepts a project member as reviewer', function () {
         $task = Task::factory()->forProject($this->project)->create(['reporter_id' => $this->author->id]);
         $stranger = User::factory()->create();
