@@ -45,7 +45,7 @@ class UpdateTaskRequest extends FormRequest
                 Rule::exists('tasks', 'id')
                     ->where('project_id', $projectId)
                     ->whereNull('parent_id')
-                    ->where('id', '!=', $task->id),
+                    ->whereNot('id', $task->id),
             ],
             'assignee_id' => ['sometimes', 'nullable', ...$member],
             'reviewer_id' => ['sometimes', 'nullable', ...$member],

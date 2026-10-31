@@ -130,7 +130,10 @@ describe('me', function () {
             ->assertOk()
             ->assertJsonPath('data.id', $user->id)
             ->assertJsonPath('data.roles', ['reporter'])
-            ->assertJsonPath('data.permissions', ['document.upload', 'incident.create', 'incident.update', 'incident.view.own']);
+            ->assertJsonPath('data.permissions', [
+                'document.upload', 'incident.create', 'incident.update', 'incident.view.own',
+                'project.view', 'task.create', 'task.update',
+            ]);
     });
 
     it('returns 401 in the standard error format without a token', function () {

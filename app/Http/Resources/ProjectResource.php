@@ -2,7 +2,9 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\ProjectMemberRole;
 use App\Models\Project;
+use App\Models\ProjectMember;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -39,13 +41,17 @@ class ProjectResource extends JsonResource
             'members_count' => $this->whenCounted('members'),
             'tasks_count' => $this->whenCounted('tasks'),
             'open_tasks_count' => $this->whenCounted('open_tasks'),
-            'members' => $this->whenLoaded('members', fn () => $this->members->map(fn (User $user): array => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->pivot->role->value,
-                'role_label' => $user->pivot->role->label(),
-            ])),
+            'members' => $this->whenLoaded('members', fn () => $this->members->map(function (User $user): array {
+                $role = $this->memberRole($user);
+
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $role->value,
+                    'role_label' => $role->label(),
+                ];
+            })),
             'active_sprint' => $this->whenLoaded(
                 'activeSprint',
                 fn () => $this->activeSprint === null ? null : new SprintResource($this->activeSprint),
@@ -55,5 +61,16 @@ class ProjectResource extends JsonResource
             'created_at' => $this->created_at?->toIso8601ZuluString(),
             'updated_at' => $this->updated_at?->toIso8601ZuluString(),
         ];
+    }
+
+    /**
+     * The role on the project_members row the user was loaded through.
+     */
+    private function memberRole(User $user): ProjectMemberRole
+    {
+        /** @var ProjectMember $pivot */
+        $pivot = $user->getRelation('pivot');
+
+        return $pivot->role;
     }
 }

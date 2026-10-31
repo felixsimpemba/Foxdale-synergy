@@ -21,19 +21,7 @@ class TaskTimelineService
         $task->load('activities.user');
 
         $activities = $task->activities
-            ->map(fn (TaskActivity $activity): array => [
-                'type' => $activity->type->value,
-                'at' => $activity->created_at?->toIso8601ZuluString() ?? '',
-                'actor' => $activity->user === null ? null : [
-                    'id' => $activity->user->id,
-                    'name' => $activity->user->name,
-                ],
-                'data' => [
-                    'from' => $activity->from_value,
-                    'to' => $activity->to_value,
-                    ...($activity->meta ?? []),
-                ],
-            ]);
+            ->map(fn (TaskActivity $activity): array => $this->activityItem($activity));
 
         $comments = $task->comments()
             ->withTrashed()
@@ -41,24 +29,51 @@ class TaskTimelineService
             ->orderBy('created_at')
             ->orderBy('id')
             ->get()
-            ->map(fn (TaskComment $comment): array => [
-                'type' => 'comment',
-                'at' => $comment->created_at?->toIso8601ZuluString() ?? '',
-                'actor' => $comment->trashed() || $comment->user === null ? null : [
-                    'id' => $comment->user->id,
-                    'name' => $comment->user->name,
-                ],
-                'data' => [
-                    'id' => $comment->id,
-                    'body' => $comment->trashed() ? null : $comment->body,
-                    'is_deleted' => $comment->trashed(),
-                    'edited_at' => $comment->edited_at?->toIso8601ZuluString(),
-                ],
-            ]);
+            ->map(fn (TaskComment $comment): array => $this->commentItem($comment));
 
         return $activities
             ->concat($comments)
             ->sortBy('at')
             ->values();
+    }
+
+    /**
+     * @return array{type: string, at: string, actor: array{id: int, name: string}|null, data: array<string, mixed>}
+     */
+    private function activityItem(TaskActivity $activity): array
+    {
+        return [
+            'type' => $activity->type->value,
+            'at' => $activity->created_at->toIso8601ZuluString(),
+            'actor' => $activity->user === null ? null : [
+                'id' => $activity->user->id,
+                'name' => $activity->user->name,
+            ],
+            'data' => array_merge([
+                'from' => $activity->from_value,
+                'to' => $activity->to_value,
+            ], $activity->meta ?? []),
+        ];
+    }
+
+    /**
+     * @return array{type: string, at: string, actor: array{id: int, name: string}|null, data: array<string, mixed>}
+     */
+    private function commentItem(TaskComment $comment): array
+    {
+        return [
+            'type' => 'comment',
+            'at' => $comment->created_at->toIso8601ZuluString(),
+            'actor' => $comment->trashed() || $comment->user === null ? null : [
+                'id' => $comment->user->id,
+                'name' => $comment->user->name,
+            ],
+            'data' => [
+                'id' => $comment->id,
+                'body' => $comment->trashed() ? null : $comment->body,
+                'is_deleted' => $comment->trashed(),
+                'edited_at' => $comment->edited_at?->toIso8601ZuluString(),
+            ],
+        ];
     }
 }

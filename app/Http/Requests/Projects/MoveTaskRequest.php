@@ -33,11 +33,11 @@ class MoveTaskRequest extends FormRequest
             ],
             'before_id' => [
                 'nullable', 'integer',
-                Rule::exists('tasks', 'id')->where('project_id', $projectId)->where('id', '!=', $task->id),
+                Rule::exists('tasks', 'id')->where('project_id', $projectId)->whereNot('id', $task->id),
             ],
             'after_id' => [
                 'nullable', 'integer',
-                Rule::exists('tasks', 'id')->where('project_id', $projectId)->where('id', '!=', $task->id),
+                Rule::exists('tasks', 'id')->where('project_id', $projectId)->whereNot('id', $task->id),
             ],
             'reviewer_id' => [
                 'nullable', 'integer',

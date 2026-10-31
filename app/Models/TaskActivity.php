@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  *
  * @property TaskActivityType $type
  * @property Carbon $created_at
+ * @property array<string, mixed>|null $meta
  */
 #[Fillable(['task_id', 'user_id', 'type', 'from_value', 'to_value', 'meta'])]
 class TaskActivity extends Model
