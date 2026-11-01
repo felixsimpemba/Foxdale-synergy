@@ -5,6 +5,10 @@ namespace App\Services;
 use App\Enums\TaskActivityType;
 use App\Enums\TaskReviewState;
 use App\Enums\TaskStatus;
+use App\Events\TaskApproved;
+use App\Events\TaskAssigned;
+use App\Events\TaskChangesRequested;
+use App\Events\TaskReviewRequested;
 use App\Exceptions\ApiException;
 use App\Models\Project;
 use App\Models\Sprint;
@@ -81,6 +85,7 @@ class TaskService
                     'reviewer_id' => $task->reviewer_id,
                     'reviewer_name' => $this->userName($task->reviewer_id),
                 ]);
+                TaskReviewRequested::dispatch($task, User::query()->findOrFail($task->reviewer_id), $reporter);
             }
 
             return $task->refresh();
@@ -169,6 +174,7 @@ class TaskService
             $project = Project::query()->findOrFail($task->project_id);
             $fromStatus = $task->status;
             $fromSprint = $task->sprint_id;
+            $previousReviewerId = $task->reviewer_id;
             $targetSprint = array_key_exists('sprint_id', $data) ? $data['sprint_id'] : $task->sprint_id;
             $reviewerId = $data['reviewer_id'] ?? $task->reviewer_id;
 
@@ -227,6 +233,10 @@ class TaskService
                     'reviewer_id' => $reviewerId,
                     'reviewer_name' => $this->userName($reviewerId),
                 ]);
+
+                if ($fromStatus !== TaskStatus::InReview || $previousReviewerId !== $reviewerId) {
+                    TaskReviewRequested::dispatch($task, User::query()->findOrFail($reviewerId), $actor);
+                }
             }
 
             return $task->refresh();
@@ -264,6 +274,7 @@ class TaskService
             }
 
             $from = $task->status;
+            $previousReviewerId = $task->reviewer_id;
             $task->forceFill([
                 'reviewer_id' => $reviewer->id,
                 'review_state' => TaskReviewState::Requested,
@@ -280,6 +291,10 @@ class TaskService
                 'reviewer_id' => $reviewer->id,
                 'reviewer_name' => $reviewer->name,
             ]);
+
+            if ($from !== TaskStatus::InReview || $previousReviewerId !== $reviewer->id) {
+                TaskReviewRequested::dispatch($task, $reviewer, $actor);
+            }
 
             return $task->refresh();
         });
@@ -311,6 +326,7 @@ class TaskService
             }
 
             $this->record($task, $actor, TaskActivityType::ReviewApproved, null, null, array_filter(['note' => $note]));
+            TaskApproved::dispatch($task, $actor);
 
             return $task->refresh();
         });
@@ -342,6 +358,7 @@ class TaskService
             }
 
             $this->record($task, $actor, TaskActivityType::ChangesRequested, null, null, ['note' => $note]);
+            TaskChangesRequested::dispatch($task, $actor, $note);
 
             return $task->refresh();
         });
@@ -574,6 +591,14 @@ class TaskService
             'from_user_id' => $fromId,
             'to_user_id' => $toId,
         ]);
+
+        if ($toId !== null) {
+            TaskAssigned::dispatch(
+                $task,
+                $fromId === null ? null : User::query()->find($fromId),
+                $actor,
+            );
+        }
     }
 
     /**

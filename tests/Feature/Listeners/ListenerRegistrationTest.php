@@ -5,6 +5,11 @@ use App\Events\IncidentCreated;
 use App\Events\IncidentStatusChanged;
 use App\Events\SlaBreached;
 use App\Events\SlaWarningRaised;
+use App\Events\TaskApproved;
+use App\Events\TaskAssigned;
+use App\Events\TaskChangesRequested;
+use App\Events\TaskCommentPosted;
+use App\Events\TaskReviewRequested;
 use Illuminate\Support\Facades\Event;
 
 /*
@@ -19,4 +24,9 @@ it('registers each notification listener exactly once', function (string $event)
     IncidentStatusChanged::class,
     SlaWarningRaised::class,
     SlaBreached::class,
+    TaskAssigned::class,
+    TaskCommentPosted::class,
+    TaskReviewRequested::class,
+    TaskChangesRequested::class,
+    TaskApproved::class,
 ]);

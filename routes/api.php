@@ -117,6 +117,7 @@ Route::prefix('v1')->name('v1.')->group(function () {
             Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
             Route::post('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
             Route::post('notifications/{notification}/read', [NotificationController::class, 'read'])->whereUuid('notification')->name('notifications.read');
+            Route::delete('notifications/{notification}', [NotificationController::class, 'destroy'])->whereUuid('notification')->name('notifications.destroy');
 
             Route::get('me/notification-preferences', [NotificationPreferenceController::class, 'show'])->name('me.notification-preferences.show');
             Route::put('me/notification-preferences', [NotificationPreferenceController::class, 'update'])->name('me.notification-preferences.update');
@@ -232,6 +233,7 @@ Route::prefix('v1')->name('v1.')->group(function () {
                 Route::post('tasks/{task}/approve', [TaskController::class, 'approve'])->name('tasks.approve');
                 Route::post('tasks/{task}/request-changes', [TaskController::class, 'requestChanges'])->name('tasks.request-changes');
                 Route::get('tasks/{task}/timeline', [TaskController::class, 'timeline'])->name('tasks.timeline');
+                Route::get('tasks/{task}/mentionable', [TaskCommentController::class, 'mentionable'])->name('tasks.mentionable');
 
                 Route::post('tasks/{task}/comments', [TaskCommentController::class, 'store'])->name('tasks.comments.store');
                 Route::put('task-comments/{taskComment}', [TaskCommentController::class, 'update'])->name('task-comments.update');

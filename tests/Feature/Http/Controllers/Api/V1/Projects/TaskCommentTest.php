@@ -1,10 +1,14 @@
 <?php
 
+use App\Enums\NotificationEvent;
 use App\Enums\RoleName;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskComment;
 use App\Models\User;
+use App\Notifications\InAppAlert;
+use App\Notifications\TaskNotice;
+use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 
 beforeEach(function () {
@@ -91,4 +95,101 @@ it('requires a body', function () {
     $this->postJson("/api/v1/tasks/{$this->task->id}/comments", ['body' => ''])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('body');
+});
+
+it('threads replies under the comment they answer', function () {
+    Sanctum::actingAs($this->author, ['*']);
+
+    $parentId = $this->postJson("/api/v1/tasks/{$this->task->id}/comments", ['body' => 'First'])
+        ->assertCreated()
+        ->json('data.id');
+
+    $this->postJson("/api/v1/tasks/{$this->task->id}/comments", [
+        'body' => 'Answer',
+        'parent_id' => $parentId,
+    ])->assertCreated()
+        ->assertJsonPath('data.parent_id', $parentId);
+
+    $thread = collect($this->getJson("/api/v1/tasks/{$this->task->id}/timeline")->json('data'))
+        ->firstWhere('type', 'comment');
+
+    expect($thread['data']['replies'])->toHaveCount(1)
+        ->and($thread['data']['replies'][0]['body'])->toBe('Answer')
+        ->and($thread['data']['replies'][0]['parent_id'])->toBe($parentId)
+        ->and($thread['data']['last_activity_at'])->not->toBeNull();
+});
+
+it('rejects replies to replies and replies from another task', function () {
+    Sanctum::actingAs($this->author, ['*']);
+
+    $parentId = $this->postJson("/api/v1/tasks/{$this->task->id}/comments", ['body' => 'First'])->json('data.id');
+    $replyId = $this->postJson("/api/v1/tasks/{$this->task->id}/comments", [
+        'body' => 'Answer',
+        'parent_id' => $parentId,
+    ])->json('data.id');
+
+    $this->postJson("/api/v1/tasks/{$this->task->id}/comments", [
+        'body' => 'Too deep',
+        'parent_id' => $replyId,
+    ])->assertUnprocessable()->assertJsonValidationErrors('parent_id');
+
+    $otherTask = Task::factory()->forProject($this->project)->create();
+    $foreign = TaskComment::factory()->for($otherTask)->create();
+
+    $this->postJson("/api/v1/tasks/{$this->task->id}/comments", [
+        'body' => 'Wrong task',
+        'parent_id' => $foreign->id,
+    ])->assertUnprocessable()->assertJsonValidationErrors('parent_id');
+});
+
+it('stores a mention, shows it on the timeline and tells the person', function () {
+    Notification::fake();
+    Sanctum::actingAs($this->author, ['*']);
+
+    $ada = userWithRole(RoleName::Responder);
+    $this->project->members()->syncWithoutDetaching([$ada->id => ['role' => 'member']]);
+
+    $this->postJson("/api/v1/tasks/{$this->task->id}/comments", [
+        'body' => "@{$ada->name} the queue is backing up, can you look?",
+    ])->assertCreated()
+        ->assertJsonPath('data.mentions.0.id', $ada->id)
+        ->assertJsonPath('data.mentions.0.name', $ada->name);
+
+    Notification::assertSentTo($ada, InAppAlert::class, fn (InAppAlert $alert) => $alert->event === NotificationEvent::TaskMention);
+    Notification::assertSentTo($ada, TaskNotice::class, fn (TaskNotice $mail) => str_contains($mail->subjectLine, $this->task->ref));
+    Notification::assertNotSentTo($this->author, InAppAlert::class);
+
+    $thread = collect($this->getJson("/api/v1/tasks/{$this->task->id}/timeline")->json('data'))
+        ->firstWhere('type', 'comment');
+
+    expect($thread['data']['mentions'])->toBe([['id' => $ada->id, 'name' => $ada->name]]);
+});
+
+it('does not mention somebody who cannot open the project', function () {
+    Notification::fake();
+    Sanctum::actingAs($this->author, ['*']);
+
+    $outsider = User::factory()->create();
+
+    $this->postJson("/api/v1/tasks/{$this->task->id}/comments", [
+        'body' => "@{$outsider->name} can you look?",
+    ])->assertCreated()->assertJsonPath('data.mentions', []);
+
+    Notification::assertNotSentTo($outsider, InAppAlert::class);
+    expect(TaskComment::query()->latest('id')->firstOrFail()->mentions()->count())->toBe(0);
+});
+
+it('lists who can be mentioned on a task', function () {
+    $member = userWithRole(RoleName::Responder);
+    $this->project->members()->syncWithoutDetaching([$member->id => ['role' => 'member']]);
+
+    Sanctum::actingAs($this->author, ['*']);
+
+    $ids = collect($this->getJson("/api/v1/tasks/{$this->task->id}/mentionable")->assertOk()->json('data'))
+        ->pluck('id');
+
+    expect($ids)->toContain($this->author->id, $member->id);
+
+    Sanctum::actingAs(userWithRole(RoleName::Reporter), ['*']);
+    $this->getJson("/api/v1/tasks/{$this->task->id}/mentionable")->assertNotFound();
 });

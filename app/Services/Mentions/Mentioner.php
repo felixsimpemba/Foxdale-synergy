@@ -4,6 +4,8 @@ namespace App\Services\Mentions;
 
 use App\Enums\PermissionKey;
 use App\Models\Incident;
+use App\Models\Project;
+use App\Models\Task;
 use App\Models\User;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -11,9 +13,9 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as SupportCollection;
 
 /**
- * Who may be mentioned on an incident, and who a comment mentions. A mention is plain text
- * ("@Grace Mwansa") so it survives editing; the names are resolved here against the people
- * who can actually open the incident.
+ * Who may be mentioned on an incident or task, and who a comment mentions. A mention is plain
+ * text ("@Grace Mwansa") so it survives editing; the names are resolved here against the
+ * people who can actually open the subject.
  */
 class Mentioner
 {
@@ -40,6 +42,38 @@ class Mentioner
             ->merge(User::query()
                 ->where('is_active', true)
                 ->where($this->havingPermission(PermissionKey::IncidentViewAll->value))
+                ->pluck('id'))
+            ->merge($teamViewers)
+            ->filter()
+            ->unique();
+
+        return User::query()
+            ->whereIn('id', $ids)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'is_active']);
+    }
+
+    /**
+     * Active people who can open this task: the project lead, its members, its owner team and
+     * anyone with project.manage. Mentioning anybody else would leak the project title.
+     *
+     * @return Collection<int, User>
+     */
+    public function mentionableOnTask(Task $task): Collection
+    {
+        $project = Project::query()->findOrFail($task->project_id);
+
+        $teamViewers = $project->owner_team_id === null ? collect() : User::query()
+            ->where('is_active', true)
+            ->whereHas('teams', fn (Builder $teams) => $teams->whereKey($project->owner_team_id))
+            ->pluck('id');
+
+        $ids = collect([$project->lead_id])
+            ->merge($project->members()->pluck('users.id'))
+            ->merge(User::query()
+                ->where('is_active', true)
+                ->where($this->havingPermission(PermissionKey::ProjectManage->value))
                 ->pluck('id'))
             ->merge($teamViewers)
             ->filter()

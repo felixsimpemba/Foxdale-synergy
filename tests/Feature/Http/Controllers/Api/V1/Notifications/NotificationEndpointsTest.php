@@ -55,6 +55,22 @@ describe('the bell', function () {
 
         $this->postJson("/api/v1/notifications/{$theirs->id}/read")->assertNotFound();
     });
+
+    it('deletes one of my notifications and nobody else\'s', function () {
+        $me = actingAsRole(RoleName::Responder);
+        alert($me);
+        $mine = $me->notifications()->first();
+
+        $this->deleteJson("/api/v1/notifications/{$mine->id}")->assertNoContent();
+        expect($me->notifications()->count())->toBe(0);
+
+        $other = User::factory()->create();
+        alert($other);
+        $theirs = $other->notifications()->first();
+
+        $this->deleteJson("/api/v1/notifications/{$theirs->id}")->assertNotFound();
+        expect($other->notifications()->count())->toBe(1);
+    });
 });
 
 describe('push subscriptions', function () {

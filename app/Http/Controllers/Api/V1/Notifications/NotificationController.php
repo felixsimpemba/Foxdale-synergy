@@ -7,6 +7,7 @@ use App\Http\Resources\AppNotificationResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Notifications\DatabaseNotification;
 
 /**
@@ -47,6 +48,13 @@ class NotificationController extends Controller
         $request->user()->unreadNotifications()->update(['read_at' => now()]);
 
         return response()->json(['data' => ['unread' => 0]]);
+    }
+
+    public function destroy(Request $request, string $notification): Response
+    {
+        $this->mine($request, $notification)->delete();
+
+        return response()->noContent();
     }
 
     private function mine(Request $request, string $id): DatabaseNotification

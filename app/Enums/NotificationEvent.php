@@ -18,6 +18,13 @@ enum NotificationEvent: string
     case RcaRejected = 'rca.rejected';
     case RcaDue = 'rca.due';
     case ActionItemOverdue = 'action_item.overdue';
+    case TaskAssigned = 'task.assigned';
+    case TaskMention = 'task.mention';
+    case TaskComment = 'task.comment';
+    case TaskReply = 'task.reply';
+    case TaskReviewRequested = 'task.review_requested';
+    case TaskChangesRequested = 'task.changes_requested';
+    case TaskApproved = 'task.approved';
 
     public function label(): string
     {
@@ -32,6 +39,13 @@ enum NotificationEvent: string
             self::RcaRejected => 'My root cause analysis is returned',
             self::RcaDue => 'A root cause analysis is overdue',
             self::ActionItemOverdue => 'One of my action items is overdue',
+            self::TaskAssigned => 'A task is assigned to me',
+            self::TaskMention => 'Someone mentions me in a task comment',
+            self::TaskComment => 'Someone comments on a task I am involved in',
+            self::TaskReply => 'Someone replies to my task comment',
+            self::TaskReviewRequested => 'A task is waiting for my review',
+            self::TaskChangesRequested => 'Changes are requested on my task',
+            self::TaskApproved => 'My task is approved',
         };
     }
 
@@ -40,6 +54,8 @@ enum NotificationEvent: string
         return match ($this) {
             self::IncidentCreated, self::IncidentAssigned, self::IncidentMention,
             self::IncidentStatusChanged, self::SlaWarning, self::SlaBreached => 'Incidents',
+            self::TaskAssigned, self::TaskMention, self::TaskComment, self::TaskReply,
+            self::TaskReviewRequested, self::TaskChangesRequested, self::TaskApproved => 'Projects',
             default => 'Root cause analysis',
         };
     }
@@ -58,6 +74,9 @@ enum NotificationEvent: string
             self::RcaReadyForReview, self::RcaRejected => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
             self::RcaDue => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
             self::ActionItemOverdue => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
+            self::TaskAssigned, self::TaskMention, self::TaskReviewRequested,
+            self::TaskChangesRequested, self::TaskApproved => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
+            self::TaskComment, self::TaskReply => [NotificationChannel::InApp, NotificationChannel::Push],
         };
     }
 
