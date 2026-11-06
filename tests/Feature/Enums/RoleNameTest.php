@@ -47,7 +47,7 @@ dataset('permission matrix', [
         'knowledge.publish', 'resolution.write',
         'rca.write', 'rca.approve', 'dashboard.view', 'report.view', 'report.export',
         'report.schedule', 'ai.use', 'routing.manage', 'user.manage', 'integration.manage',
-        'audit.view',
+        'audit.view', 'survey.manage',
     ]],
 ]);
 

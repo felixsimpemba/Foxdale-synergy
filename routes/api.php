@@ -31,6 +31,8 @@ use App\Http\Controllers\Api\V1\Notifications\NotificationPreferenceController;
 use App\Http\Controllers\Api\V1\Notifications\PushSubscriptionController;
 use App\Http\Controllers\Api\V1\PeopleController;
 use App\Http\Controllers\Api\V1\ProjectController;
+use App\Http\Controllers\Api\V1\Pulse\PulseAdminController;
+use App\Http\Controllers\Api\V1\Pulse\PulseSurveyController;
 use App\Http\Controllers\Api\V1\Rca\RcaActionItemController;
 use App\Http\Controllers\Api\V1\Rca\RcaController;
 use App\Http\Controllers\Api\V1\Routing\EscalationPolicyController;
@@ -62,6 +64,23 @@ Route::prefix('v1')->name('v1.')->group(function () {
     Route::get('documents/{document}/file', [DocumentController::class, 'file'])
         ->middleware(['signed', 'throttle:60,1'])
         ->name('documents.file');
+
+    // Department Pulse: the form is public by design. Editing a response needs the private
+    // token issued at creation; the honeypot and throttle keep naive bots out.
+    Route::get('pulse/config', [PulseSurveyController::class, 'config'])
+        ->middleware('throttle:60,1')
+        ->name('pulse.config');
+    Route::post('pulse/responses', [PulseSurveyController::class, 'store'])
+        ->middleware('throttle:pulse')
+        ->name('pulse.responses.store');
+    Route::get('pulse/responses/{pulseResponse}', [PulseSurveyController::class, 'show'])
+        ->whereNumber('pulseResponse')
+        ->middleware('throttle:pulse')
+        ->name('pulse.responses.show');
+    Route::put('pulse/responses/{pulseResponse}', [PulseSurveyController::class, 'update'])
+        ->whereNumber('pulseResponse')
+        ->middleware('throttle:pulse')
+        ->name('pulse.responses.update');
 
     Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('login', [AuthController::class, 'login'])->middleware('throttle:login')->name('login');
@@ -282,6 +301,12 @@ Route::prefix('v1')->name('v1.')->group(function () {
                 Route::delete('on-call-schedules/{onCallSchedule}', [OnCallScheduleController::class, 'destroy'])->name('on-call-schedules.destroy');
                 Route::post('on-call-schedules/{onCallSchedule}/shifts', [OnCallScheduleController::class, 'storeShifts'])->name('on-call-schedules.shifts.store');
                 Route::delete('on-call-schedules/{onCallSchedule}/shifts/{shift}', [OnCallScheduleController::class, 'destroyShift'])->name('on-call-schedules.shifts.destroy');
+
+                // Department Pulse responses are visible to people with the survey permission
+                // (the admin role by default). Session tokens only, like the rest of admin.
+                Route::get('pulse/admin/responses', [PulseAdminController::class, 'index'])
+                    ->middleware('can:survey.manage')
+                    ->name('pulse.admin.responses');
 
                 Route::prefix('admin')->name('admin.')->group(function () {
                     Route::get('users', [UserController::class, 'index'])->name('users.index');

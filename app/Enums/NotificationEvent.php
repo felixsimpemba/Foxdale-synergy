@@ -25,6 +25,7 @@ enum NotificationEvent: string
     case TaskReviewRequested = 'task.review_requested';
     case TaskChangesRequested = 'task.changes_requested';
     case TaskApproved = 'task.approved';
+    case PulseResponseCreated = 'pulse.response_created';
 
     public function label(): string
     {
@@ -46,6 +47,7 @@ enum NotificationEvent: string
             self::TaskReviewRequested => 'A task is waiting for my review',
             self::TaskChangesRequested => 'Changes are requested on my task',
             self::TaskApproved => 'My task is approved',
+            self::PulseResponseCreated => 'A Department Pulse response arrives',
         };
     }
 
@@ -56,6 +58,7 @@ enum NotificationEvent: string
             self::IncidentStatusChanged, self::SlaWarning, self::SlaBreached => 'Incidents',
             self::TaskAssigned, self::TaskMention, self::TaskComment, self::TaskReply,
             self::TaskReviewRequested, self::TaskChangesRequested, self::TaskApproved => 'Projects',
+            self::PulseResponseCreated => 'Department Pulse',
             default => 'Root cause analysis',
         };
     }
@@ -77,6 +80,7 @@ enum NotificationEvent: string
             self::TaskAssigned, self::TaskMention, self::TaskReviewRequested,
             self::TaskChangesRequested, self::TaskApproved => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
             self::TaskComment, self::TaskReply => [NotificationChannel::InApp, NotificationChannel::Push],
+            self::PulseResponseCreated => [NotificationChannel::InApp, NotificationChannel::Email],
         };
     }
 

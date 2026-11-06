@@ -13,6 +13,7 @@ use App\Models\IncidentSlaEvent;
 use App\Models\OnCallSchedule;
 use App\Models\OnCallShift;
 use App\Models\Project;
+use App\Models\PulseResponse;
 use App\Models\Rca;
 use App\Models\RcaActionItem;
 use App\Models\RoutingRule;
@@ -88,6 +89,7 @@ class AppServiceProvider extends ServiceProvider
             'runbook' => Runbook::class,
             'rca' => Rca::class,
             'rca_action_item' => RcaActionItem::class,
+            'pulse_response' => PulseResponse::class,
             'role' => Role::class,
             'permission' => Permission::class,
         ]);
@@ -129,5 +131,8 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('two-factor', fn (Request $request) => Limit::perMinute(5)
             ->by((string) $request->input('challenge_token').'|'.$request->ip()));
+
+        // The public survey is meant for a room of department heads, not a crawler.
+        RateLimiter::for('pulse', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
     }
 }

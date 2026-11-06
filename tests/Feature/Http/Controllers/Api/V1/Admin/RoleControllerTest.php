@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\PermissionKey;
 use App\Enums\RoleName;
 use App\Models\AuditLog;
 use App\Models\User;
@@ -24,7 +25,7 @@ it('lists every permission key with a description', function () {
 
     $this->getJson('/api/v1/admin/permissions')
         ->assertOk()
-        ->assertJsonCount(34, 'data')
+        ->assertJsonCount(count(PermissionKey::cases()), 'data')
         ->assertJsonPath('data.0', ['key' => 'incident.create', 'description' => 'Report incidents']);
 });
 

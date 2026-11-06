@@ -38,6 +38,7 @@ enum PermissionKey: string
     case UserManage = 'user.manage';
     case IntegrationManage = 'integration.manage';
     case AuditView = 'audit.view';
+    case SurveyManage = 'survey.manage';
 
     public function description(): string
     {
@@ -76,6 +77,7 @@ enum PermissionKey: string
             self::UserManage => 'Manage users, roles, teams and services',
             self::IntegrationManage => 'Manage API keys, chat channels, AI and system settings',
             self::AuditView => 'View the audit log',
+            self::SurveyManage => 'View and export Department Pulse survey responses',
         };
     }
 
