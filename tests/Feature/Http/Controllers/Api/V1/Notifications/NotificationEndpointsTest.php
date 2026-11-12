@@ -47,6 +47,28 @@ describe('the bell', function () {
         $this->getJson('/api/v1/notifications')->assertOk()->assertJsonPath('meta.unread', 0);
     });
 
+    it('collects mentions in their own inbox', function () {
+        $me = actingAsRole(RoleName::Responder);
+        alert($me, NotificationEvent::IncidentMention);
+        alert($me, NotificationEvent::TaskMention);
+        alert($me, NotificationEvent::IncidentAssigned);
+        alert($me, NotificationEvent::IncidentMention);
+
+        $this->getJson('/api/v1/notifications?mentions=1')
+            ->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('meta.mentions_unread', 3)
+            ->assertJsonPath('meta.unread', 4);
+
+        $this->postJson('/api/v1/notifications/read-all', ['mentions' => true])
+            ->assertOk()
+            ->assertJsonPath('data.unread', 1);
+
+        $this->getJson('/api/v1/notifications?mentions=1&unread=1')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    });
+
     it('never lets me read someone else\'s notification', function () {
         actingAsRole(RoleName::Responder);
         $other = User::factory()->create();

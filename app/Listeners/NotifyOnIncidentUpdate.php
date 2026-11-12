@@ -38,7 +38,7 @@ class NotifyOnIncidentUpdate
             $incident,
             [
                 'title' => "Update on {$incident->ref}",
-                'body' => $body === '' ? "{$author} posted an update." : "{$author}: {$body}",
+                'body' => $body === '' ? "*{$author}* posted an update." : "*{$author}*\n{$body}",
                 'url' => config('incidents.frontend_url')."/incidents/{$incident->id}#update-{$update->id}",
             ],
         );

@@ -5,6 +5,7 @@ namespace App\Services\Notifications;
 use App\Enums\NotificationChannel;
 use App\Enums\NotificationDeliveryStatus;
 use App\Enums\NotificationEvent;
+use App\Enums\Severity;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Incident;
 use App\Models\NotificationLog;
@@ -95,37 +96,74 @@ class WhatsAppNotifier
      */
     private function groupText(NotificationEvent $event, ?Model $subject, array $content): string
     {
-        $title = $event === NotificationEvent::IncidentAssigned && $subject instanceof Incident
-            ? "Incident assigned: {$subject->ref}"
-            : $content['title'];
-
-        $lines = [$title, $content['body']];
-
-        if ($subject instanceof Incident) {
-            $subject->loadMissing(['service', 'assignee']);
-
-            if ($event === NotificationEvent::IncidentCreated) {
-                $description = Str::limit(trim((string) $subject->description), 300);
-
-                if ($description !== '') {
-                    $lines[] = $description;
-                }
-            }
-
-            $details = array_filter([
-                (string) $subject->ref,
-                $subject->severity->label(),
-                ucfirst($subject->status->value),
-                (string) $subject->service?->name,
-                $subject->assignee === null ? 'Unassigned' : 'Assigned to '.$subject->assignee->name,
-            ]);
-
-            $lines[] = implode(' · ', $details);
+        if (! $subject instanceof Incident) {
+            return self::format($content);
         }
 
-        $lines[] = $content['url'];
+        $subject->loadMissing(['service', 'assignee']);
 
-        return implode("\n", array_filter($lines, fn (string $line): bool => trim($line) !== ''));
+        $icon = match ($event) {
+            NotificationEvent::IncidentCreated, NotificationEvent::SlaBreached => '🚨',
+            NotificationEvent::IncidentAssigned => '🔔',
+            NotificationEvent::IncidentStatusChanged => '🔄',
+            NotificationEvent::SlaWarning => '⏰',
+            NotificationEvent::IncidentUpdatePosted => '💬',
+            default => '📣',
+        };
+
+        $label = match ($event) {
+            NotificationEvent::IncidentCreated => 'NEW INCIDENT',
+            NotificationEvent::IncidentAssigned => 'INCIDENT ASSIGNED',
+            NotificationEvent::IncidentStatusChanged => 'STATUS UPDATE',
+            NotificationEvent::SlaWarning => 'SLA WARNING',
+            NotificationEvent::SlaBreached => 'SLA BREACHED',
+            NotificationEvent::IncidentUpdatePosted => 'NEW UPDATE',
+            default => 'INCIDENT UPDATE',
+        };
+
+        $severity = match ($subject->severity) {
+            Severity::Sev1 => '🔴 SEV1',
+            Severity::Sev2 => '🟠 SEV2',
+            Severity::Sev3 => '🟡 SEV3',
+            Severity::Sev4 => '🟢 SEV4',
+        };
+
+        $sections = [
+            "{$icon} *{$label} — {$subject->ref}*",
+            implode(' · ', array_filter([
+                $severity,
+                (string) $subject->service?->name,
+            ])),
+        ];
+
+        $sections[] = match ($event) {
+            NotificationEvent::IncidentCreated => "*{$subject->title}*\n"
+                .Str::limit(trim((string) $subject->description), 300),
+            NotificationEvent::IncidentAssigned => "*{$subject->title}*\nAssigned to *"
+                .($subject->assignee?->name ?? 'nobody').'*',
+            NotificationEvent::IncidentStatusChanged => "*{$subject->title}*\nNew status: *"
+                .ucfirst($subject->status->value).'*',
+            NotificationEvent::IncidentUpdatePosted => "*{$subject->title}*\n\n{$content['body']}",
+            default => $content['body'],
+        };
+
+        $facts = [];
+
+        if ($event !== NotificationEvent::IncidentStatusChanged) {
+            $facts[] = '📌 *Status:* '.ucfirst($subject->status->value);
+        }
+
+        if ($event !== NotificationEvent::IncidentAssigned) {
+            $facts[] = '👤 *Assigned to:* '.($subject->assignee?->name ?? 'Unassigned');
+        }
+
+        if ($facts !== []) {
+            $sections[] = implode("\n", $facts);
+        }
+
+        $sections[] = "🔗 {$content['url']}";
+
+        return implode("\n\n", array_filter($sections, fn (string $section): bool => trim($section) !== ''));
     }
 
     /**
@@ -162,11 +200,11 @@ class WhatsAppNotifier
     public static function format(array $content): string
     {
         $lines = array_filter(
-            [$content['title'], $content['body'], $content['url']],
+            ["*{$content['title']}*", $content['body'], "🔗 {$content['url']}"],
             fn (string $line): bool => trim($line) !== '',
         );
 
-        return implode("\n", $lines);
+        return implode("\n\n", $lines);
     }
 
     /** Phone numbers go to the gateway as digits only; E.164's leading + is dropped. */

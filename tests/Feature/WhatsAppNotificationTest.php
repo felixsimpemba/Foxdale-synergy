@@ -148,9 +148,9 @@ it('includes the incident details in group messages', function () {
 
     Queue::assertPushed(
         SendWhatsAppMessage::class,
-        fn (SendWhatsAppMessage $job): bool => str_contains($job->text, "Incident assigned: {$incident->ref}")
+        fn (SendWhatsAppMessage $job): bool => str_contains($job->text, "*INCIDENT ASSIGNED — {$incident->ref}*")
             && str_contains($job->text, 'SEV2')
-            && str_contains($job->text, 'Acknowledged')
+            && str_contains($job->text, '*Status:* Acknowledged')
             && str_contains($job->text, $url),
     );
 });
@@ -170,7 +170,8 @@ it('posts a Send to chat update to the active groups', function () {
 
     Queue::assertPushed(
         SendWhatsAppMessage::class,
-        fn (SendWhatsAppMessage $job): bool => str_contains($job->text, 'Jane Banda: We found the cause in the payment gateway.')
+        fn (SendWhatsAppMessage $job): bool => str_contains($job->text, '*Jane Banda*')
+            && str_contains($job->text, 'We found the cause in the payment gateway.')
             && str_contains($job->text, $incident->ref)
             && str_contains($job->text, "/incidents/{$incident->id}"),
     );
