@@ -13,6 +13,7 @@ use App\Notifications\IncidentNotice;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notifications\NotificationService;
 use App\Services\Notifications\PushService;
+use App\Services\Notifications\WhatsAppNotifier;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakePushSender;
@@ -20,10 +21,16 @@ use Tests\Support\FakePushSender;
 beforeEach(function () {
     Queue::fake();
     Notification::fake();
+    // These tests are about the bell, email and push; WhatsApp has its own tests.
+    config(['incidents.whatsapp.api_key' => null]);
     $this->push = new FakePushSender;
     // Built directly: replacing a container binding mid-test does not reliably reach an
     // already-constructed service.
-    $this->service = new NotificationService(app(NotificationPreferences::class), new PushService($this->push));
+    $this->service = new NotificationService(
+        app(NotificationPreferences::class),
+        new PushService($this->push),
+        app(WhatsAppNotifier::class),
+    );
     $this->user = User::factory()->create();
     $this->incident = Incident::factory()->create();
     $this->content = ['title' => 'Assigned to you: INC-1', 'body' => 'Deposits failing', 'url' => 'http://localhost:3000/incidents/1'];
@@ -110,7 +117,7 @@ it('never notifies the person who did the action, inactive people, or the same p
 });
 
 it('logs why nothing was sent when every channel is off', function () {
-    setPreferences($this->user, ['channels' => ['in_app' => false, 'push' => false, 'email' => false]]);
+    setPreferences($this->user, ['channels' => ['in_app' => false, 'push' => false, 'email' => false, 'whatsapp' => false]]);
 
     $this->service->sendTo($this->user, NotificationEvent::IncidentAssigned, $this->incident, $this->content);
 
@@ -140,7 +147,7 @@ it('starts with every channel on for every event and stores changes', function (
     $preferences = app(NotificationPreferences::class);
     $defaults = $preferences->for($this->user);
 
-    expect($defaults['events']['incident.assigned'])->toBe(['in_app', 'push', 'email'])
+    expect($defaults['events']['incident.assigned'])->toBe(['in_app', 'push', 'email', 'whatsapp'])
         ->and($defaults['events']['incident.status_changed'])->toBe(['in_app', 'push'])
         ->and($defaults['quiet_hours'])->toBe(['enabled' => false, 'start' => '22:00', 'end' => '07:00', 'timezone' => 'UTC']);
 
@@ -154,7 +161,7 @@ it('starts with every channel on for every event and stores changes', function (
     expect($saved['channels']['email'])->toBeFalse()
         // A global channel switch wins over an event-level choice.
         ->and($saved['events']['incident.status_changed'])->toBe(['push'])
-        ->and($saved['events']['incident.assigned'])->toBe(['in_app', 'push'])
+        ->and($saved['events']['incident.assigned'])->toBe(['in_app', 'push', 'whatsapp'])
         ->and($saved)->not->toHaveKey('unknown_event');
 });
 

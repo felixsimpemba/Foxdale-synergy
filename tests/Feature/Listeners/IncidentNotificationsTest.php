@@ -25,14 +25,18 @@ use App\Notifications\IncidentNotice;
 use App\Services\Notifications\NotificationPreferences;
 use App\Services\Notifications\NotificationService;
 use App\Services\Notifications\PushService;
+use App\Services\Notifications\WhatsAppNotifier;
 use Illuminate\Support\Facades\Notification;
 use Tests\Support\FakePushSender;
 
 beforeEach(function () {
     Notification::fake();
+    // WhatsApp delivery has its own tests; keep these focused on the bell and email.
+    config(['incidents.whatsapp.api_key' => null]);
     $this->notifications = new NotificationService(
         app(NotificationPreferences::class),
         new PushService(new FakePushSender),
+        app(WhatsAppNotifier::class),
     );
 });
 

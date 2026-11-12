@@ -63,17 +63,28 @@ enum NotificationEvent: string
         };
     }
 
+    /** Whether this event is also posted to the WhatsApp groups admins switched on. */
+    public function broadcastsToWhatsAppGroups(): bool
+    {
+        return in_array($this, [
+            self::IncidentCreated,
+            self::IncidentStatusChanged,
+            self::SlaWarning,
+            self::SlaBreached,
+        ], true);
+    }
+
     /**
      * @return list<NotificationChannel>
      */
     public function defaultChannels(): array
     {
         return match ($this) {
-            self::IncidentCreated, self::IncidentMention,
-            self::IncidentAssigned => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
+            self::IncidentCreated, self::IncidentAssigned => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email, NotificationChannel::WhatsApp],
+            self::IncidentMention => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
             self::IncidentStatusChanged => [NotificationChannel::InApp, NotificationChannel::Push],
-            self::SlaWarning => [NotificationChannel::InApp, NotificationChannel::Push],
-            self::SlaBreached => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
+            self::SlaWarning => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::WhatsApp],
+            self::SlaBreached => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email, NotificationChannel::WhatsApp],
             self::RcaReadyForReview, self::RcaRejected => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
             self::RcaDue => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
             self::ActionItemOverdue => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Admin\PermissionController;
 use App\Http\Controllers\Api\V1\Admin\RoleController;
 use App\Http\Controllers\Api\V1\Admin\SettingController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
+use App\Http\Controllers\Api\V1\Admin\WhatsAppController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\Auth\SessionController;
@@ -338,6 +339,16 @@ Route::prefix('v1')->name('v1.')->group(function () {
                     Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
 
                     Route::get('notification-log', [NotificationLogController::class, 'index'])->name('notification-log.index');
+
+                    Route::prefix('whatsapp')->name('whatsapp.')->middleware('can:integration.manage')->group(function () {
+                        Route::get('/', [WhatsAppController::class, 'show'])->name('show');
+                        Route::put('/', [WhatsAppController::class, 'update'])->name('update');
+                        Route::get('groups', [WhatsAppController::class, 'groups'])->name('groups.index');
+                        Route::put('groups', [WhatsAppController::class, 'saveGroups'])->name('groups.update');
+                        Route::post('instance', [WhatsAppController::class, 'createInstance'])->name('instance.store');
+                        Route::get('connect', [WhatsAppController::class, 'connect'])->name('connect');
+                        Route::post('test', [WhatsAppController::class, 'test'])->name('test');
+                    });
 
                     Route::put('sla-policies/{severity}', [SlaPolicyController::class, 'update'])->whereNumber('severity')->name('sla-policies.update');
 

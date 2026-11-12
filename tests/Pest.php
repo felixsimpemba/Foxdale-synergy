@@ -17,14 +17,21 @@ use Tests\TestCase;
 
 pest()->extend(TestCase::class)
     ->use(LazilyRefreshDatabase::class)
-    ->beforeEach(fn () => Http::preventStrayRequests())
+    ->beforeEach(function (): void {
+        Http::preventStrayRequests();
+        // Never message a real phone from the test suite; WhatsApp tests opt in.
+        config(['incidents.whatsapp.api_key' => null]);
+    })
     ->in('Feature');
 
 // InnoDB only indexes FULLTEXT changes on commit, so search tests cannot run inside a
 // rolled-back transaction. These truncate the tables before each test instead.
 pest()->extend(TestCase::class)
     ->use(DatabaseTruncation::class)
-    ->beforeEach(fn () => Http::preventStrayRequests())
+    ->beforeEach(function (): void {
+        Http::preventStrayRequests();
+        config(['incidents.whatsapp.api_key' => null]);
+    })
     ->in('Integration');
 
 /*

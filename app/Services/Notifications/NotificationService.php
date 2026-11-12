@@ -14,14 +14,16 @@ use Throwable;
 
 /**
  * The one way anything in the system tells a person something (specification section 12):
- * it writes the in-app bell entry, queues browser push and sends email, each only on the
- * channels that person allows. Every message is written to notification_logs.
+ * it writes the in-app bell entry, queues browser push, sends email and queues WhatsApp
+ * texts, each only on the channels that person allows. Every message is written to
+ * notification_logs.
  */
 class NotificationService
 {
     public function __construct(
         private readonly NotificationPreferences $preferences,
         private readonly PushService $push,
+        private readonly WhatsAppNotifier $whatsapp,
     ) {}
 
     /**
@@ -31,6 +33,9 @@ class NotificationService
      */
     public function send(iterable $recipients, NotificationEvent $event, ?Model $subject, array $content, ?Notification $mail = null, ?User $actor = null): void
     {
+        // Group alerts do not depend on who the individual recipients are.
+        $this->whatsapp->broadcastToGroups($event, $subject, $content);
+
         $sent = [];
 
         foreach ($recipients as $user) {
@@ -83,6 +88,10 @@ class NotificationService
         if (in_array(NotificationChannel::Push, $channels, true) && $this->push->canReach($user)) {
             $log = $this->log($user, $event, $subject, $content, NotificationChannel::Push, NotificationDeliveryStatus::Queued);
             $this->push->queue($user, $event, $content, $log->id);
+        }
+
+        if (in_array(NotificationChannel::WhatsApp, $channels, true)) {
+            $this->whatsapp->queueToUser($user, $event, $subject, $content);
         }
     }
 

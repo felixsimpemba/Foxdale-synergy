@@ -30,6 +30,7 @@ class NotificationPreferences
                 NotificationChannel::InApp->value => true,
                 NotificationChannel::Push->value => true,
                 NotificationChannel::Email->value => true,
+                NotificationChannel::WhatsApp->value => true,
             ],
             'quiet_hours' => ['enabled' => false, 'start' => '22:00', 'end' => '07:00'],
         ];

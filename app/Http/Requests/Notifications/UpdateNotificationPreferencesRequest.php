@@ -39,7 +39,7 @@ class UpdateNotificationPreferencesRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'events.*.*.enum' => 'Choose the app, browser push or email.',
+            'events.*.*.enum' => 'Choose the app, browser push, email or WhatsApp.',
         ];
     }
 

@@ -28,10 +28,6 @@ class NotifyOnIncidentCreated
 
         $recipients = $recipients->filter()->unique('id');
 
-        if ($recipients->isEmpty()) {
-            return;
-        }
-
         $title = "New {$incident->severity->label()} incident: {$incident->ref}";
         $url = config('incidents.frontend_url')."/incidents/{$incident->id}";
 

@@ -44,6 +44,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | WhatsApp gateway (WAPI)
+    |--------------------------------------------------------------------------
+    |
+    | Self-hosted WAPI instance used for WhatsApp notifications. The API key is
+    | server-side only; the instance name can also be changed by an admin from
+    | the WhatsApp admin page (stored as the whatsapp.instance setting).
+    |
+    */
+
+    'whatsapp' => [
+        'base_url' => rtrim((string) env('WHATSAPP_API_URL', 'https://wapi-api.homerentzm.org'), '/'),
+        'api_key' => env('WHATSAPP_API_KEY'),
+        'instance' => env('WHATSAPP_INSTANCE', 'whatsapp-linked'),
+        'timeout' => (int) env('WHATSAPP_TIMEOUT', 20),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | SLA
     |--------------------------------------------------------------------------
     |
@@ -156,7 +174,9 @@ return [
         'ai.features.draft_update' => true,
         'ai.features.draft_rca' => true,
         'channels.mattermost.enabled' => false,
+        // Master switch for WhatsApp delivery; enabled from the WhatsApp admin page.
         'channels.whatsapp.enabled' => false,
+        'whatsapp.instance' => env('WHATSAPP_INSTANCE', 'whatsapp-linked'),
     ],
 
 ];

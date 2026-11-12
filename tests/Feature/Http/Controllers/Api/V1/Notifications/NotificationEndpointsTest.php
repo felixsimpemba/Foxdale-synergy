@@ -169,7 +169,7 @@ describe('preferences', function () {
         $this->getJson('/api/v1/me/notification-preferences')
             ->assertOk()
             ->assertJsonPath('data.channels.push', true)
-            ->assertJsonPath('data.events', fn (array $events) => $events['sla.breached'] === ['in_app', 'push', 'email']);
+            ->assertJsonPath('data.events', fn (array $events) => $events['sla.breached'] === ['in_app', 'push', 'email', 'whatsapp']);
 
         $this->putJson('/api/v1/me/notification-preferences', [
             'channels' => ['email' => false],
