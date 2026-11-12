@@ -50,6 +50,10 @@ class NotificationPreferences
         $events = [];
 
         foreach (NotificationEvent::cases() as $event) {
+            if ($event->isGroupOnly()) {
+                continue;
+            }
+
             $events[$event->value] = array_map(
                 fn (NotificationChannel $channel): string => $channel->value,
                 $this->effectiveChannels($user, $event, $settings),
@@ -70,7 +74,10 @@ class NotificationPreferences
     public function store(User $user, array $input): array
     {
         $defaults = $this->defaults();
-        $knownEvents = array_column(NotificationEvent::cases(), 'value');
+        $knownEvents = array_map(
+            fn (NotificationEvent $event): string => $event->value,
+            array_filter(NotificationEvent::cases(), fn (NotificationEvent $event): bool => ! $event->isGroupOnly()),
+        );
         $knownChannels = array_column(NotificationChannel::cases(), 'value');
 
         $events = collect($input['events'] ?? [])

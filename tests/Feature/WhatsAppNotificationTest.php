@@ -1,10 +1,15 @@
 <?php
 
+use App\Enums\IncidentStatus;
 use App\Enums\NotificationChannel;
 use App\Enums\NotificationDeliveryStatus;
 use App\Enums\NotificationEvent;
+use App\Enums\Severity;
+use App\Events\UpdatePosted;
 use App\Jobs\SendWhatsAppMessage;
+use App\Listeners\NotifyOnIncidentUpdate;
 use App\Models\Incident;
+use App\Models\IncidentUpdate;
 use App\Models\NotificationLog;
 use App\Models\User;
 use App\Models\WhatsAppGroup;
@@ -125,6 +130,60 @@ it('broadcasts incident alerts to active groups once', function () {
         ->whereNull('user_id')
         ->where('channel', NotificationChannel::WhatsApp)
         ->count())->toBe(1);
+});
+
+it('includes the incident details in group messages', function () {
+    Queue::fake();
+    WhatsAppGroup::factory()->active()->create(['group_jid' => '120363410040073098@g.us']);
+    $incident = Incident::factory()
+        ->severity(Severity::Sev2)
+        ->create(['status' => IncidentStatus::Acknowledged]);
+    $url = 'https://app.test/incidents/'.$incident->id;
+
+    app(NotificationService::class)->send([], NotificationEvent::IncidentAssigned, $incident, [
+        'title' => "Assigned to you: {$incident->ref}",
+        'body' => $incident->title,
+        'url' => $url,
+    ]);
+
+    Queue::assertPushed(
+        SendWhatsAppMessage::class,
+        fn (SendWhatsAppMessage $job): bool => str_contains($job->text, "Incident assigned: {$incident->ref}")
+            && str_contains($job->text, 'SEV2')
+            && str_contains($job->text, 'Acknowledged')
+            && str_contains($job->text, $url),
+    );
+});
+
+it('posts a Send to chat update to the active groups', function () {
+    Queue::fake();
+    WhatsAppGroup::factory()->active()->create(['group_jid' => '120363410040073098@g.us']);
+    $author = User::factory()->create(['name' => 'Jane Banda']);
+    $incident = Incident::factory()->create();
+    $update = IncidentUpdate::factory()->for($incident)->create([
+        'user_id' => $author->id,
+        'body' => 'We found the cause in the payment gateway.',
+    ]);
+
+    (new NotifyOnIncidentUpdate(app(NotificationService::class)))
+        ->handle(new UpdatePosted($update, true));
+
+    Queue::assertPushed(
+        SendWhatsAppMessage::class,
+        fn (SendWhatsAppMessage $job): bool => str_contains($job->text, 'Jane Banda: We found the cause in the payment gateway.')
+            && str_contains($job->text, $incident->ref)
+            && str_contains($job->text, "/incidents/{$incident->id}"),
+    );
+});
+
+it('does not post updates without the send-to-chat flag', function () {
+    Queue::fake();
+    WhatsAppGroup::factory()->active()->create();
+
+    (new NotifyOnIncidentUpdate(app(NotificationService::class)))
+        ->handle(new UpdatePosted(IncidentUpdate::factory()->create(), false));
+
+    Queue::assertNothingPushed();
 });
 
 it('does not broadcast events that are personal only', function () {

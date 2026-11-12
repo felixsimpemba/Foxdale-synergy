@@ -12,6 +12,8 @@ enum NotificationEvent: string
     case IncidentAssigned = 'incident.assigned';
     case IncidentMention = 'incident.mention';
     case IncidentStatusChanged = 'incident.status_changed';
+    /** Timeline updates marked "Send to chat". Group-only; never sent to individuals. */
+    case IncidentUpdatePosted = 'incident.update_posted';
     case SlaWarning = 'sla.warning';
     case SlaBreached = 'sla.breached';
     case RcaReadyForReview = 'rca.ready_for_review';
@@ -34,6 +36,7 @@ enum NotificationEvent: string
             self::IncidentAssigned => 'An incident is assigned to me',
             self::IncidentMention => 'Someone mentions me in a comment',
             self::IncidentStatusChanged => 'Status changes on incidents I reported or watch',
+            self::IncidentUpdatePosted => 'An update is posted on an incident I watch',
             self::SlaWarning => 'An incident I own is close to an SLA deadline',
             self::SlaBreached => 'An incident I own misses an SLA target',
             self::RcaReadyForReview => 'A root cause analysis is ready for review',
@@ -55,7 +58,8 @@ enum NotificationEvent: string
     {
         return match ($this) {
             self::IncidentCreated, self::IncidentAssigned, self::IncidentMention,
-            self::IncidentStatusChanged, self::SlaWarning, self::SlaBreached => 'Incidents',
+            self::IncidentStatusChanged, self::IncidentUpdatePosted,
+            self::SlaWarning, self::SlaBreached => 'Incidents',
             self::TaskAssigned, self::TaskMention, self::TaskComment, self::TaskReply,
             self::TaskReviewRequested, self::TaskChangesRequested, self::TaskApproved => 'Projects',
             self::PulseResponseCreated => 'Department Pulse',
@@ -68,10 +72,18 @@ enum NotificationEvent: string
     {
         return in_array($this, [
             self::IncidentCreated,
+            self::IncidentAssigned,
             self::IncidentStatusChanged,
+            self::IncidentUpdatePosted,
             self::SlaWarning,
             self::SlaBreached,
         ], true);
+    }
+
+    /** Chat-only events never appear in an individual's notification settings. */
+    public function isGroupOnly(): bool
+    {
+        return $this === self::IncidentUpdatePosted;
     }
 
     /**
@@ -83,6 +95,7 @@ enum NotificationEvent: string
             self::IncidentCreated, self::IncidentAssigned => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email, NotificationChannel::WhatsApp],
             self::IncidentMention => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
             self::IncidentStatusChanged => [NotificationChannel::InApp, NotificationChannel::Push],
+            self::IncidentUpdatePosted => [],
             self::SlaWarning => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::WhatsApp],
             self::SlaBreached => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email, NotificationChannel::WhatsApp],
             self::RcaReadyForReview, self::RcaRejected => [NotificationChannel::InApp, NotificationChannel::Push, NotificationChannel::Email],
