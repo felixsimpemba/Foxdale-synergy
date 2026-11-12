@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $subject
  * @property bool $is_active
  */
+#[Table('whatsapp_groups')]
 #[Fillable(['group_jid', 'subject', 'is_active'])]
 class WhatsAppGroup extends Model
 {
