@@ -6,8 +6,8 @@ use App\Models\User;
 use Laravel\Sanctum\PersonalAccessToken;
 
 describe('login', function () {
-    it('returns a bearer token that expires after 8 hours', function () {
-        $this->freezeTime();
+    it('returns a bearer token that does not expire', function () {
+        config(['incidents.auth.session_token_minutes' => 0]);
         $user = userWithRole(RoleName::Responder, ['email' => 'jane@example.com']);
 
         $response = $this->postJson('/api/v1/auth/login', [
@@ -18,14 +18,33 @@ describe('login', function () {
 
         $response->assertOk()
             ->assertJsonPath('token_type', 'Bearer')
-            ->assertJsonPath('expires_at', now()->addHours(8)->toIso8601ZuluString())
+            ->assertJsonPath('expires_at', null)
             ->assertJsonPath('user.id', $user->id)
             ->assertJsonPath('user.roles', ['responder'])
             ->assertJsonMissingPath('two_factor_setup_required');
 
-        expect(PersonalAccessToken::findToken($response->json('token'))->tokenable->is($user))->toBeTrue()
+        $token = PersonalAccessToken::findToken($response->json('token'));
+
+        expect($token->tokenable->is($user))->toBeTrue()
+            ->and($token->expires_at)->toBeNull()
             ->and($user->fresh()->last_login_at)->not->toBeNull();
         $this->assertDatabaseHas(AuditLog::class, ['action' => 'auth.login', 'user_id' => $user->id, 'source' => 'api']);
+    });
+
+    it('expires the token when a finite session lifetime is configured', function () {
+        $this->freezeTime();
+        config(['incidents.auth.session_token_minutes' => 60]);
+        userWithRole(RoleName::Responder, ['email' => 'jane@example.com']);
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'jane@example.com',
+            'password' => 'password',
+            'device_name' => 'web',
+        ])->assertOk()
+            ->assertJsonPath('expires_at', now()->addHour()->toIso8601ZuluString());
+
+        expect(PersonalAccessToken::first()->expires_at?->toIso8601ZuluString())
+            ->toBe(now()->addHour()->toIso8601ZuluString());
     });
 
     it('returns 422 for a wrong password and records the failure', function () {
@@ -104,12 +123,15 @@ describe('logout', function () {
 
 describe('refresh', function () {
     it('issues a new session token and revokes the old one', function () {
+        config(['incidents.auth.session_token_minutes' => 0]);
         $user = User::factory()->create();
         $old = $user->createToken('session:web', ['*']);
 
         $response = $this->withToken($old->plainTextToken)->postJson('/api/v1/auth/refresh');
 
-        $response->assertOk()->assertJsonPath('user.id', $user->id);
+        $response->assertOk()
+            ->assertJsonPath('user.id', $user->id)
+            ->assertJsonPath('expires_at', null);
         expect(PersonalAccessToken::find($old->accessToken->id))->toBeNull()
             ->and(PersonalAccessToken::findToken($response->json('token'))->name)->toBe('session:web');
     });

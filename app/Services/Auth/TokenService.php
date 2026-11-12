@@ -17,7 +17,11 @@ class TokenService
 
     public function issueSessionToken(User $user, string $deviceName): NewAccessToken
     {
-        $expiresAt = now()->addMinutes(config('incidents.auth.session_token_minutes'));
+        // Session tokens do not expire: a device stays signed in until the person signs out
+        // or an admin revokes the session. A positive session_token_minutes imposes a
+        // finite lifetime instead (the frontend then refreshes the token before it lapses).
+        $minutes = (int) config('incidents.auth.session_token_minutes');
+        $expiresAt = $minutes > 0 ? now()->addMinutes($minutes) : null;
 
         return $user->createToken(self::SESSION_PREFIX.$deviceName, [TokenAbility::Full->value], $expiresAt);
     }

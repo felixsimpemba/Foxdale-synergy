@@ -23,8 +23,9 @@ return [
     */
 
     'auth' => [
-        // Lifetime of tokens issued by /auth/login and /auth/refresh.
-        'session_token_minutes' => (int) env('SANCTUM_EXPIRATION', 480),
+        // Lifetime of tokens issued by /auth/login and /auth/refresh. 0 means the device
+        // stays signed in until the person signs out or an admin revokes the session.
+        'session_token_minutes' => (int) env('SANCTUM_EXPIRATION', 0),
 
         // Personal tokens (scripts, MCP clients) may live longer, up to this limit.
         'personal_token_default_days' => 90,
